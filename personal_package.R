@@ -84,7 +84,7 @@ day0 <- function(.date) {
 # fill numeric vector NA values with smooth averages
 fill_average <- function(.vec) {
   if (all(is.na(.vec))) { # county 06003, is literally all 0s. so if you get c(NA, NA, ...) just return a vec of 0s.
-    rep(0, length = length(.vec))
+    rep(NA, length = length(.vec))
   }
   else {
     filledVec <- .vec

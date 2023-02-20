@@ -2,9 +2,20 @@
 ### Regressions
 ############################################################################## #  
 
-lm(attendance_per ~ density_cbsa_w_n_cases + home + away + weekday + season 
-   + adj_home_odds + game_time_approx + policy,
-   data = filter(dat.final, league == "NBA" & season == "2021-22"))
+lm(attendance_per ~ d_cbsa_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy,
+   data = filter(dat.final, league == "NBA") %>% filter(season == "2021-22")) %>% 
+  stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
+
+lm(density_cbsa_f_w_n_cases ~ density_neigh_cbsa_f_w_n_cases + month + weekday + home + away + season_wins_scaled +  game_time_approx + adj_home_odds,
+   data = filter(dat.final, league == "NBA")) %>% 
+  stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
+
+
+ivreg(attendance_per ~ d_cbsa_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy|
+        d_lneigh_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy,
+      data = filter(dat.final, league == "NBA") %>% filter(season == "2021-22")) %>% 
+  stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
+
 
 ivreg(attendance_per ~ density_cbsa_w_n_cases + home + away + weekday + season 
    + adj_home_odds + game_time_approx + policy | 
