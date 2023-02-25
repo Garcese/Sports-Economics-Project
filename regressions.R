@@ -2,8 +2,79 @@
 ### Regressions
 ############################################################################## #  
 
-lm(attendance_per ~ d_cbsa_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy,
-   data = filter(dat.final, league == "NBA") %>% filter(season == "2021-22")) %>% 
+# NBA, without IV
+feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds + policy | # controls
+        home + away + weekday, # fixed effects
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22") %>% 
+        filter(home %notin% c("Boston Celtics", "Golden State Warriors", "Utah Jazz", "Miami Heat")),
+      vcov = ~home
+) %>% 
+  etable(tex = T)
+# NBA, with IV
+feols(attendance_per ~ adj_home_odds + policy | # controls
+        home + away + weekday | # fixed effects
+        cbsa_w_n_cases ~ l_neigh_w_n_cases, # instrument
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22") %>% 
+        filter(home %notin% c("Boston Celtics", "Golden State Warriors", "Utah Jazz", "Miami Heat")),
+      vcov = ~home
+) %>% 
+  etable(tex = T)
+# NHL, without IV
+feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds + policy | # controls
+        home + away + weekday, # fixed effects
+      data = filter(dat.final, league == "NHL") %>% 
+        filter(season == "2021-22") %>% 
+        filter(home %notin% c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")),
+      vcov = ~home
+) %>% 
+  etable(tex = T)
+# NHL, with IV
+feols(attendance_per ~ adj_home_odds + policy | # controls
+        home + away + weekday | # fixed effects
+        cbsa_w_n_cases ~ l_neigh_w_n_cases, # instrument
+      data = filter(dat.final, league == "NHL") %>% 
+        filter(season == "2021-22") %>% 
+        filter(home %notin% c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")),
+      vcov = ~home
+) %>% 
+  etable(tex = T)
+
+# impute the data
+# try OLS with varying degrees of controls,
+# clustering the standord errors at the error
+
+# NBA teams that have basically 0 variance
+c("Boston Celtics", "Golden State Warriors", "Utah Jazz", "Miami Heat")
+# NBA teams with the highest variance (Top 5)
+c("Detroit Pistons", "Washington Wizards", "Orlando Magic", "San Antonio Spurs", "Denver Nuggets")
+# NHL teams with basically 0 variance
+c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")
+# NHL teams with the highest variance
+c("Buffalo Sabres", "Arizona Coyotes", "New Jersey Devils", "San Jose Sharks", "Los Angeles Kings")
+
+ivreg(attendance_per ~ home + away + month + weekday + adj_home_odds + cbsa_w_n_cases |
+        home + away + month + weekday + adj_home_odds + l_neigh_w_n_cases,
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22") %>% 
+        filter(home %notin% c("Boston Celtics", "Golden State Warriors", "Utah Jazz", "Miami Heat"))
+      ) %>% 
+  summary()
+
+
+
+
+
+
+
+lm(attendance_per ~ cbsa_w_n_cases + month + weekday + home + away + game_time_approx + adj_home_odds
+   + game_time_approx + adj_home_odds + policy,
+   data = filter(dat.final, league == "NHL") %>% filter(season == "2021-22") %>% 
+     filter(home %notin% c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals"))) %>% 
+  summary()
+  
+  
   stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
 
 lm(density_cbsa_f_w_n_cases ~ density_neigh_cbsa_f_w_n_cases + month + weekday + home + away + season_wins_scaled +  game_time_approx + adj_home_odds,
@@ -11,9 +82,12 @@ lm(density_cbsa_f_w_n_cases ~ density_neigh_cbsa_f_w_n_cases + month + weekday +
   stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
 
 
-ivreg(attendance_per ~ d_cbsa_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy|
-        d_lneigh_w_n_cases + month + weekday + home + away + season_wins_scaled + game_time_approx + adj_home_odds + policy,
-      data = filter(dat.final, league == "NBA") %>% filter(season == "2021-22")) %>% 
+ivreg(attendance_per ~ cbsa_w_n_cases + month + weekday + home + away + game_time_approx + adj_home_odds + policy |
+        l_neigh_w_n_cases + month + weekday + home + away + game_time_approx + adj_home_odds + policy,
+      data = filter(dat.final, league == "NBA") %>% filter(season == "2021-22") %>% 
+        filter(home %in% c("Detroit Pistons", "Washington Wizards", "Orlando Magic", "San Antonio Spurs"))) %>% 
+  summary()
+  
   stargazer(type = "text", omit = c("season", "month", "weekday", "home", "away", "game_time_approx")) 
 
 
@@ -23,6 +97,9 @@ ivreg(attendance_per ~ density_cbsa_w_n_cases + home + away + weekday + season
    + adj_home_odds + game_time_approx + policy,
    data = filter(dat.final, league == "NBA"))
 
+# dat.final %>% filter(season == "2021-22") %>%
+#   group_by(home) %>%
+#   summarize(n = n(), mean = mean(attendance_per), median = median(attendance_per), sd = sd(attendance_per))
 
 
 ivreg(attendance_per ~ density_cbsa_w_n_cases + home | home + density_neigh_cbsa_w_n_cases, data = dat.final) %>% 

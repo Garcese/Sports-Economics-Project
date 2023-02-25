@@ -4,16 +4,16 @@
 ############################################################################## #  
 
 # had to make a copy of libgdal.32.dylib and rename is libgdal.31.dylib
-# Stanislaus county is techincally neighboring two CBSA but probably should just be one
+# Stanislaus county is techincally neighboring two CBSA but probably should just be one - may not be an issue anymore
 
 # packages
 library(expp) # neighbors data frame function
 # this messes with view() function, and probably lots of others
 as.data.frame <- base::as.data.frame
 library(fastDummies)
+library(fixest) # regression stuff
 library(htmltools) # for leaflet
 library(httr) # data-scraping
-library(ivreg)
 library(leaflet)
 library(lubridate)
 library(magrittr)
@@ -198,8 +198,8 @@ dat.population <- read_csv("assets/cbsa_data/dat.population.csv") %>%
 dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default = "c")) %>% 
   as_tibble() %>% 
   select(CBSA, CBSA_title, STATE, COUNTY, central_outlying) %>% 
-  rename_with(~tolower(.x), everything()) %>% 
-  filter(cbsa %in% (c(12060, 14460, 15380, 16740, 16980, 17460, 18140, 19100, 19740, 
+  rename_with(~tolower(.x), everything()) %>%
+  filter(cbsa %in% (c(12060, 14460, 15380, 16740, 16980, 17460, 18140, 19100, 19740,
                      19820, 26420, 26900, 29820, 31080, 32820, 33100, 33340, 33460,
                      34980, 35380, 35620, 36420, 36740, 37980, 38060, 38300, 38900, 
                      39580, 40900, 41180, 41620, 41700, 41860, 41940, 45300, 47900) %>% 
@@ -261,7 +261,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   # 2021-09-13 is the Monday 4 weeks before the first NHL games, 2022-05-29 is the ...
   # ... Sunday 4 weeks after the last games. The NBA starts later and finishes earlier than the NHL
   filter("2021-09-12" <= date & date <= "2022-05-29") %>% # keep a day before 2021-09-13 for lag calculation
-  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips") %>% 
+  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", multiple = "all") %>% 
   relocate(cbsa:home, .after = date) %>% 
   relocate(central_outlying:cbsa_pop, .after = county) %>% 
   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
@@ -276,17 +276,19 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   filter(date > "2021-09-12") %>% # we just needed this to calculate new cases for 2021-09-13
   # we now have the same fips as dat.cbsa, but 4 less so 725 FIPs each with 259 observations. ...
   # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
-  mutate(across(n_cases:n_deaths, ~case_when(
-    .x < 0 ~ 0,
+  mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
+    .x <= 0 ~ NA,
     T ~ .x
   ))) %>% 
   group_by(cbsa, fips) %>% 
+  mutate(across(n_cases:n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
+  # gets the rolling weekly cases figure, and the lag of that.
   mutate(across(n_cases:n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
                 .names = "w_{col}")) %>% 
   mutate(across(w_n_cases:w_n_deaths, ~ lag(get(cur_column()), 7),
                 .names = "l_{col}")) %>% 
-  ungroup() %>% 
-  left_join(
+  ungroup() %>% # aggregate to cbsa lebels
+  left_join( 
     filter(., central_outlying != "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
@@ -297,7 +299,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       mutate(across(cbsa_w_n_cases:cbsa_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_n_deaths),
     by = c("date", "cbsa")) %>% 
-  left_join(
+  left_join( # aggregate to cbsa levels
     filter(., central_outlying == "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
@@ -307,107 +309,8 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       group_by(cbsa) %>% # add one week lag
       mutate(across(neigh_w_n_cases:neigh_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_n_deaths),
-    by = c("date", "cbsa")) %>% 
-  # mutate(temp = case_when(central_outlying == "Neighboring" ~ T, T ~ F)) %>% 
-  # group_by(date, cbsa, temp) %>% 
-  # mutate(across(w_n_cases:l_w_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-  # ungroup() %>% 
-  mutate(across(matches("(?=.*cbsa)(?=.*_n)|(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop, .names = "d_{col}"))
-
-  
-  
-  
-  left_join(
-    filter(., central_outlying != "Neighboring") %>% 
-      distinct(date, cbsa, fips, .keep_all = T) %>%
-      group_by(date, cbsa) %>% 
-      mutate(across(n_cases:n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-      distinct(date, cbsa, .keep_all = T) %>% 
-      ungroup() %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_n_cases:cbsa_n_deaths, ~lag(.x), .names = "lag_{col}")) %>% 
-      select(date, cbsa, cbsa_n_cases:lag_cbsa_n_deaths),
-    by = c("date", "cbsa"))
-
-
-
-  left_join(group_by(., fips, cbsa) %>% 
-              mutate(w_n_cases = case_when( # encodes 0 and negatives as NAs
-                w_n_cases <= 0 ~ NA_real_,
-                T ~ w_n_cases
-              )) %>% # 191401
-              mutate(w_n_deaths = case_when(
-                w_n_deaths <= 0 ~ NA_real_, # Encoding 0s messes stuff up because first observations are sometimes 0.
-                T ~ w_n_deaths
-              )) %>% 
-              distinct(.,  floor_monday, cbsa, fips, .keep_all = T) %>% 
-              mutate(across(w_n_cases:w_n_deaths, ~floor(fill_average(.x)), .names = "f_{col}")) %>% 
-              select(floor_monday,cbsa, fips, f_w_n_cases:f_w_n_deaths),
-            by = c("floor_monday", "cbsa", "fips")) %>% 
-  # filter(floor_monday != as.Date("2022-05-23")) %>% 
-  # I used to remove the week above, as the were some 0s in the case/death counts in the last week.
-  # Aggregate to CBSA level below.
-  left_join(
-    filter(., central_outlying != "Neighboring") %>% 
-      distinct(date, cbsa, fips, .keep_all = T) %>%
-      group_by(date, cbsa) %>% 
-      mutate(across(n_cases:n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-      distinct(date, cbsa, .keep_all = T) %>% 
-      ungroup() %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_n_cases:cbsa_n_deaths, ~lag(.x), .names = "lag_{col}")) %>% 
-      select(date, cbsa, cbsa_n_cases:lag_cbsa_n_deaths),
-    by = c("date", "cbsa")) %>% 
-  left_join(
-    filter(., central_outlying == "Neighboring") %>% 
-      distinct(date, cbsa, fips, .keep_all = T) %>%
-      group_by(date, cbsa) %>% 
-      mutate(across(n_cases:n_deaths, ~sum(.x), .names = "neigh_cbsa_{col}")) %>% 
-      distinct(date, cbsa, .keep_all = T) %>% 
-      ungroup() %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(neigh_cbsa_n_cases:neigh_cbsa_n_deaths, ~lag(.x), .names = "lag_{col}")) %>% 
-      select(date, cbsa, neigh_cbsa_n_cases:lag_neigh_cbsa_n_deaths),
-    by = c("date", "cbsa")) %>% 
-  left_join(
-    filter(., central_outlying != "Neighboring") %>% 
-      distinct(floor_monday, cbsa, fips, .keep_all = T) %>%
-      group_by(floor_monday, cbsa) %>% 
-      mutate(across(w_n_cases:f_w_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-      distinct(floor_monday, cbsa, .keep_all = T) %>% 
-      ungroup() %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_w_n_cases:cbsa_f_w_n_deaths, ~lag(.x), .names = "lag_{col}")) %>% 
-      select(floor_monday, cbsa, cbsa_w_n_cases:lag_cbsa_f_w_n_deaths),
-    by = c("floor_monday", "cbsa")) %>% 
-  left_join(
-    filter(., central_outlying == "Neighboring") %>% 
-      distinct(floor_monday, cbsa, fips, .keep_all = T) %>%
-      group_by(floor_monday, cbsa) %>% 
-      mutate(across(w_n_cases:f_w_n_deaths, ~sum(.x), .names = "neigh_cbsa_{col}")) %>% 
-      distinct(floor_monday, cbsa, .keep_all = T) %>% 
-      ungroup() %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(neigh_cbsa_w_n_cases:neigh_cbsa_f_w_n_deaths, ~lag(.x), .names = "lag_{col}")) %>% 
-      select(floor_monday, cbsa, neigh_cbsa_w_n_cases:lag_neigh_cbsa_f_w_n_deaths),
-    by = c("floor_monday", "cbsa")) %>% 
-  mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*10000/cbsa_pop, .names = "density_{col}"))
-
-# write_csv(dat.covid %>% mutate(across(everything(), ~as.character(.x) %>% paste0("?"))),
-#           "assets/cleaned/dat.covid.csv")
-# not loading nicely? Maybe cause im doing it rn with a bunch of NAs? Shouldn't be different from last timne ...
-# write.xlsx(dat.covid %>% mutate(across(everything(), ~as.character(.x))),
-#            "assets/cleaned/dat.covid.xlsx")
-
-# Calvert in washington
-# theres a week in boston. can look at essex county
-# gilpin county, fips 13149 good examples of differneces in the fill.
-# old notes below VVVV
-# examples:
-# Manassas Park city -> very little covid activity, 7 day stretches of 0 cases
-# Canadien county -> 1 figure the whole week
-# Orange county, Florida -> 1 figure the whole week, example of 2 figures a week ...
-# ... they also seemed to only be reporting deaths for a period of time
+    by = c("date", "cbsa")) %>% # turn into a percent
+  mutate(across(matches("(?=.*cbsa)(?=.*_n)|(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop))
 
 # Betting Data -----------------------------------------------------------------
 
@@ -646,7 +549,7 @@ dat.final <- dat.nba %>%
   relocate(cbsa:time_zone, .after = date) %>% 
   left_join(dat.covid %>% # merging covid-19 data, 16 vars
               distinct(date, cbsa, .keep_all = T) %>% 
-              select(date, cbsa, d_cbsa_w_n_cases:ncol(.)),
+              select(date, cbsa, cbsa_w_n_cases:ncol(.)),
             by = c("date", "cbsa")) %>% 
   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>% 
   relocate(season, .after = floor_monday) %>% 
@@ -669,8 +572,8 @@ dat.final <- dat.nba %>%
   ), .after = game_time_num) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
   mutate(weekday = weekdays(date), .after = date) %>% 
-  mutate(across(contains("density"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
-  mutate(policy = case_when(is.na(policy) ~ "No Policy", T ~ policy)) %>% 
+  # mutate(across(contains("density"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  # mutate(policy = case_when(is.na(policy) ~ "No Policy", T ~ policy)) %>% 
   mutate(month = month(date, label = T, abbr = F) %>% as.character(), .before = weekday) %>% 
   mutate(season_wins = str_sub(home_record, 1L, 2L), .before = home_record) %>% 
   group_by(season, home) %>% 
@@ -678,7 +581,7 @@ dat.final <- dat.nba %>%
   ungroup() %>% # need to use distinct because not an equal number of entries per team per season (cause of mexico games and such)
   left_join(distinct(., season, league, home, .keep_all = T) %>% 
               group_by(season, league) %>% 
-              mutate(season_wins_scaled = scale(season_wins)) %>% 
+              mutate(season_wins_scaled = as.numeric(scale(season_wins))) %>% 
               ungroup() %>% 
               select(season, home, season_wins_scaled),
             by = c("season", "home")) %>% 
@@ -785,3 +688,11 @@ dat.leaflet.cbsa <- dat.leaflet %>%
 
 
 
+
+
+
+#
+
+
+
+#

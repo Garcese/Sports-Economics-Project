@@ -102,6 +102,36 @@ fill_average <- function(.vec) {
     replace(filledVec, is.na(filledVec), 0) # replace any existing NAs on the boundaries with 0.
   }
 }
+# distributes first non-NA value to previous NA values
+my_impute <- function(.vec) {
+  if (all(is.na(.vec))) { # county 06003, is literally all 0s. so if you get c(NA, NA, ...) just return a vec of 0s.
+    rep(NA, length = length(.vec))
+  }
+  else {
+    minNumId <- which(!is.na(.vec)) %>% min()
+    maxNumId <- which(!is.na(.vec)) %>% max()
+    filledVec <- .vec
+    for (i in 1:length(.vec)) {
+      lagDist <- length(head(.vec, i-1)) - max(which(!is.na(head(.vec, i-1)))) + 1
+      lagValue <- head(.vec, i-1)[max(which(!is.na(head(.vec, i-1))))]
+      leadDist <- min(which(!is.na(tail(.vec, -i))))
+      leadValue <- tail(.vec, -i)[leadDist]
+      if (i < minNumId) { # special cases for first section of NAs
+        filledVec[i] <- leadValue/(minNumId)
+      }
+      else if (i == minNumId) { # ...
+        filledVec[i] <- .vec[i]/minNumId
+      }
+      else if (is.na(.vec[i]) & i > minNumId & i < maxNumId) { # regular calc
+        filledVec[i] <- leadValue/(leadDist + lagDist)
+      }
+      else if (i > 1 && is.na(.vec[i-1]) & !is.na(.vec[i])) { # for the value that is being distributed
+        filledVec[i] <- .vec[i]/lagDist
+      }
+    }
+    replace(filledVec, is.na(filledVec), NA) # replace any existing NAs on the boundaries with NA.
+  }
+}
 # mass load all csvs in a directory
 mass_load <- function(.src, .pos, .bind = F) {
   files <- list.files(path = .src, pattern = "*.csv")
