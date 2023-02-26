@@ -297,6 +297,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(cbsa_w_n_cases:cbsa_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_n_deaths),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
@@ -308,9 +309,9 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(neigh_w_n_cases:neigh_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_n_deaths),
-    by = c("date", "cbsa")) %>% # turn into a percent
-  mutate(across(matches("(?=.*cbsa)(?=.*_n)|(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop))
+    by = c("date", "cbsa"))
 
 # Betting Data -----------------------------------------------------------------
 
@@ -536,7 +537,7 @@ dat.final <- dat.nba %>%
   mutate(across(attendance:capacity, ~str_extract(.x, "(?<=: )[\\s\\S]*") %>% 
                   str_replace(",", "") %>% 
                   as.numeric())) %>% 
-  mutate(attendance_per = attendance/capacity) %>% 
+  mutate(attendance_per = attendance*100/capacity) %>% 
   relocate(attendance_per, .after = capacity) %>% # up to here all just string cleaning
   mutate(across(c(home_record, away_record, game_time), ~str_extract(.x, "^[^,]*"))) %>% 
   left_join(dat.bet %>% select(-home_odds, -away_odds), by = c("date", "home")) %>% 
@@ -572,8 +573,8 @@ dat.final <- dat.nba %>%
   ), .after = game_time_num) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
   mutate(weekday = weekdays(date), .after = date) %>% 
-  # mutate(across(contains("density"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
-  # mutate(policy = case_when(is.na(policy) ~ "No Policy", T ~ policy)) %>% 
+  mutate(across(contains("_w"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  mutate(policy = case_when(is.na(policy) ~ "none", T ~ policy)) %>% 
   mutate(month = month(date, label = T, abbr = F) %>% as.character(), .before = weekday) %>% 
   mutate(season_wins = str_sub(home_record, 1L, 2L), .before = home_record) %>% 
   group_by(season, home) %>% 
@@ -587,12 +588,6 @@ dat.final <- dat.nba %>%
             by = c("season", "home")) %>% 
   relocate(season_wins_scaled, .after = season_wins)
   
-# write_csv(dat.final %>% mutate(across(everything(), ~as.character(.x) %>% paste0("?"))),
-#           "assets/cleaned/dat.final.csv")
-# # not loading nicely? Maybe cause i"m doing it with a bunch of NAs? Shouldn't be different from last time ...
-# write.xlsx(dat.final %>% mutate(across(everything(), ~as.character(.x))),
-#           "assets/cleaned/dat.final.xlsx")
-
 # Leaflet Data -----------------------------------------------------------------
 
 # 200 by 710 observations
@@ -696,3 +691,5 @@ dat.leaflet.cbsa <- dat.leaflet %>%
 
 
 #
+
+
