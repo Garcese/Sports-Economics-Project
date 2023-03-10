@@ -6,8 +6,7 @@
 feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds + policy | # controls
         home + away + weekday, # fixed effects
       data = filter(dat.final, league == "NBA") %>% 
-        filter(season == "2021-22") %>% 
-        filter(home %notin% c("Boston Celtics", "Golden State Warriors", "Utah Jazz", "Miami Heat")),
+        filter(season == "2021-22"),
       vcov = ~home
 ) %>% 
   etable(tex = T)
@@ -22,7 +21,7 @@ feols(attendance_per ~ adj_home_odds + policy | # controls
 ) %>% 
   etable(tex = T)
 # NHL, without IV
-feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds + policy | # controls
+feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds | # controls
         home + away + weekday, # fixed effects
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22") %>% 
@@ -40,11 +39,11 @@ feols(attendance_per ~ adj_home_odds + policy | # controls
       vcov = ~home
 ) %>% 
   etable(tex = T)
-
+# MISC
 feols(attendance_per ~ adj_home_odds + season_wins_scaled + policy | # controls
         home + away + month + weekday | # fixed effects
       cbsa_w_n_cases ~ l_neigh_w_n_cases, # instrument
-      data = filter(dat.final, league == "NHL"),
+      data = filter(dat.final, league == "NBA"),
       vcov = ~home
 ) %>% 
   etable(tex = T)
