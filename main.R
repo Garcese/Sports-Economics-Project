@@ -3,14 +3,8 @@
 ### gtarcese@gmail.com - 10/5/2022
 ############################################################################## #  
 
-# had to make a copy of libgdal.32.dylib and rename is libgdal.31.dylib
-# install.packages("terra", type = "source", configure.args = c("--with-sqlite3-lib=/usr/local/Cellar/squlite/3.41.1/lib", "--with-proj-lib=/usr/local/Cellar/proj/9.2.0/lib"))
-# Stanislaus county is techincally neighboring two CBSA but probably should just be one - may not be an issue anymore
-
 # packages
-library(expp) # neighbors data frame function
-# this messes with view() function, and probably lots of others
-as.data.frame <- base::as.data.frame
+library(expp) # neighbors data frame function. this messes with view() function, and probably lots of others
 library(fastDummies)
 library(fixest) # regression stuff
 library(htmltools) # for leaflet
@@ -23,9 +17,11 @@ library(patchwork)
 library(performance)
 library(renv)
 library(RCurl) # needed for something ...
+library(rsconnect)
 library(rvest) # read_html function
 library(scales)
 library(shiny)
+library(shinycssloaders)
 library(spdep) # spatial data, I think
 library(stargazer)
 library(tidycensus) # census data
@@ -33,9 +29,9 @@ library(tidyselect)
 library(tidyverse)
 library(tigris) # census data
 library(totalcensus) # cbsa data
-# import "personal package"
-source("personal_package.R", local = personal_package <- new.env())
-personal_package$my_attach(personal_package) 
+# import helper functions. Keeps them out of global namespace. Also sets some global options
+source("helper.R", local = helper <- new.env())
+helper$my_attach(helper) 
 
 # Raw Data Collection ----------------------------------------------------------
 
@@ -93,89 +89,6 @@ get_estimates(geography = "county", product = "population", year = 2019) %>%
 
 # FIP/CBSA Data ----------------------------------------------------------------
 
-# assigns home team to cbsa
-assign_home <- function(.cbsa) {
-  case_when(
-    .cbsa == "12060" ~ "Atlanta Hawks",
-    .cbsa == "14460" ~ "Boston Bruins,Boston Celtics",
-    .cbsa == "15380" ~ "Buffalo Sabres",
-    .cbsa == "16740" ~ "Charlotte Hornets",
-    .cbsa == "16980" ~ "Chicago Blackhawks,Chicago Bulls",
-    .cbsa == "17460" ~ "Cleveland Cavaliers",
-    .cbsa == "18140" ~ "Columbus Blue Jackets",
-    .cbsa == "19100" ~ "Dallas Mavericks,Dallas Stars",
-    .cbsa == "19740" ~ "Colorado Avalanche,Denver Nuggets",
-    .cbsa == "19820" ~ "Detroit Pistons,Detroit Red Wings",
-    .cbsa == "26420" ~ "Houston Rockets",
-    .cbsa == "26900" ~ "Indiana Pacers",
-    .cbsa == "29820" ~ "Vegas Golden Knights",
-    .cbsa == "31080" ~ "Anaheim Ducks,Los Angeles Clippers,Los Angeles Kings,Los Angeles Lakers",
-    .cbsa == "32820" ~ "Memphis Grizzlies",
-    .cbsa == "33100" ~ "Florida Panthers,Miami Heat",
-    .cbsa == "33340" ~ "Milwaukee Bucks",
-    .cbsa == "33460" ~ "Minnesota Timberwolves,Minnesota Wild",
-    .cbsa == "34980" ~ "Nashville Predators",
-    .cbsa == "35380" ~ "New Orleans Pelicans", 
-    .cbsa == "35620" ~ "Brooklyn Nets,New Jersey Devils,New York Islanders,New York Knicks,New York Rangers",
-    .cbsa == "36420" ~ "Oklahoma City Thunder",
-    .cbsa == "36740" ~ "Orlando Magic",
-    .cbsa == "37980" ~ "Philadelphia 76ers,Philadelphia Flyers",
-    .cbsa == "38060" ~ "Arizona Coyotes,Phoenix Suns",
-    .cbsa == "38300" ~ "Pittsburgh Penguins",
-    .cbsa == "38900" ~ "Portland Trail Blazers",
-    .cbsa == "39580" ~ "Carolina Hurricanes",
-    .cbsa == "40900" ~ "Sacramento Kings",
-    .cbsa == "41180" ~ "St. Louis Blues", 
-    .cbsa == "41620" ~ "Utah Jazz",
-    .cbsa == "41700" ~ "San Antonio Spurs",
-    .cbsa == "41860" ~ "Golden State Warriors",
-    .cbsa == "41940" ~ "San Jose Sharks",
-    .cbsa == "45300" ~ "Tampa Bay Lightning",
-    .cbsa == "47900" ~ "Washington Capitals,Washington Wizards"
-  )
-}
-# returns time zone based on cbsa code
-cbsa_to_time <- function(.cbsa) {
-  case_when(
-    .cbsa == "12060" ~ "EST",
-    .cbsa == "14460" ~ "EST",
-    .cbsa == "15380" ~ "EST",
-    .cbsa == "16740" ~ "EST",
-    .cbsa == "16980" ~ "CST",
-    .cbsa == "17460" ~ "EST",
-    .cbsa == "18140" ~ "EST",
-    .cbsa == "19100" ~ "CST",
-    .cbsa == "19740" ~ "MST",
-    .cbsa == "19820" ~ "EST",
-    .cbsa == "26420" ~ "CST",
-    .cbsa == "26900" ~ "EST",
-    .cbsa == "29820" ~ "PST",
-    .cbsa == "31080" ~ "PST",
-    .cbsa == "32820" ~ "CST",
-    .cbsa == "33100" ~ "EST",
-    .cbsa == "33340" ~ "CST",
-    .cbsa == "33460" ~ "CST",
-    .cbsa == "34980" ~ "CST",
-    .cbsa == "35380" ~ "CST", 
-    .cbsa == "35620" ~ "EST",
-    .cbsa == "36420" ~ "CST",
-    .cbsa == "36740" ~ "EST",
-    .cbsa == "37980" ~ "EST",
-    .cbsa == "38060" ~ "MST",
-    .cbsa == "38300" ~ "EST",
-    .cbsa == "38900" ~ "PST",
-    .cbsa == "39580" ~ "EST",
-    .cbsa == "40900" ~ "PST",
-    .cbsa == "41180" ~ "CST", 
-    .cbsa == "41620" ~ "MST",
-    .cbsa == "41700" ~ "CST",
-    .cbsa == "41860" ~ "PST",
-    .cbsa == "41940" ~ "PST",
-    .cbsa == "45300" ~ "EST",
-    .cbsa == "47900" ~ "EST"
-  )
-}
-
 # get neighboring counties
 dat.neighboring <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>% # gets county geo-spatial data
   select(GEOID, geometry) %>% 
@@ -187,7 +100,7 @@ dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function th
   group_by(id) %>% 
   summarize(id_neigh = list(unique(id_neigh))) %>% 
   ungroup() %>% 
-  set_colnames(c("fips", "fips_neighbors"))
+  set_colnames(c("fips", "fips_neighbors")) # 3214 observations - 3/23/2023
 
 # clean population data for merge
 dat.population <- read_csv("assets/cbsa_data/dat.population.csv") %>% 
@@ -242,11 +155,10 @@ dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default 
   group_by(cbsa, temp) %>% 
   mutate(cbsa_pop = sum(pop)) %>% 
   ungroup(temp) %>% 
-  select(-temp)
-
-  # 313 unique CBSA-only fips, 416 neighbor-only fips, 403 unique neighbor-only fips. ...
-  # ... 23 duplicates. 13 neighbor-neighbor duplicates, 10 neighbor-cbsa duplicates. ...
-  # ... together, there are 313 + 403 - 10 = 706 unique fips
+  select(-temp) # 729 observations - 3/23/2023
+# 313 unique CBSA-only fips, 416 neighbor-only fips, 403 unique neighbor-only fips. ...
+# ... 23 duplicates. 13 neighbor-neighbor duplicates, 10 neighbor-cbsa duplicates. ...
+# ... together, there are 313 + 403 - 10 = 706 unique fips
 
 # Covid-19 Data ----------------------------------------------------------------
 
@@ -262,7 +174,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   # 2021-09-13 is the Monday 4 weeks before the first NHL games, 2022-05-29 is the ...
   # ... Sunday 4 weeks after the last games. The NBA starts later and finishes earlier than the NHL
   filter("2021-09-12" <= date & date <= "2022-05-29") %>% # keep a day before 2021-09-13 for lag calculation
-  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", multiple = "all") %>% 
+  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", relationship = "many-to-many") %>% 
   relocate(cbsa:home, .after = date) %>% 
   relocate(central_outlying:cbsa_pop, .after = county) %>% 
   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
@@ -275,7 +187,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   )) %>%  
   ungroup() %>% 
   filter(date > "2021-09-12") %>% # we just needed this to calculate new cases for 2021-09-13
-  # we now have the same fips as dat.cbsa, but 4 less so 725 FIPs each with 259 observations. ...
+  # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
   # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
   mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
     .x <= 0 ~ NA,
@@ -283,12 +195,15 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   ))) %>% 
   group_by(cbsa, fips) %>% 
   mutate(across(n_cases:n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
+  mutate(across(n_cases:n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
+  # ... at the end of the data set, so we are fine setting them to 0.
   # gets the rolling weekly cases figure, and the lag of that.
   mutate(across(n_cases:n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
                 .names = "w_{col}")) %>% 
   mutate(across(w_n_cases:w_n_deaths, ~ lag(get(cur_column()), 7),
                 .names = "l_{col}")) %>% 
-  ungroup() %>% # aggregate to cbsa lebels
+  ungroup() %>% # aggregate to cbsa levels
   left_join( 
     filter(., central_outlying != "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
@@ -312,13 +227,13 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       mutate(across(neigh_w_n_cases:neigh_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_n_deaths),
-    by = c("date", "cbsa"))
+    by = c("date", "cbsa")) # 187775 obs. you get errors from my_impute function
 
 # Betting Data -----------------------------------------------------------------
 
 # load already cleaned betting data
 attach_source("bet.R", "betting_data")
-dat.bet <- load_clean_bet()
+dat.bet <- load_clean_bet() # 13320 obs
 
 # Game Data Cleaning -----------------------------------------------------------
 
@@ -344,7 +259,7 @@ dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 6158 observati
     date == "2017-11-08" & home == "Orlando Magic" ~ "Attendance: 18,803", # https://www.nba.com/game/nyk-vs-orl-0021700160
     T ~ attendance
   )) %>% 
-  mutate(league = "NBA", .after = date)
+  mutate(league = "NBA", .after = date) # 5933 obs
 
 # clean NHL data 
 dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observations
@@ -390,145 +305,9 @@ dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observati
                                  "8:00 PM, October 8, 2015", "8:00 PM, October 8, 2015",
                                  "7:30 PM, October 8, 2015"))) %>% 
   arrange(date) %>% 
-  mutate(league = "NHL", .after = date)
+  mutate(league = "NHL", .after = date) # 4815 obs
 
 # Final Merge ------------------------------------------------------------------
-
-# policy data function
-policy_func <- function(.home, .date) {
-  case_when(
-    .home == "Anaheim Ducks" & .date > "2022-04-01" ~ "none",
-    .home == "Anaheim Ducks" & .date > "2022-01-15" ~ "vaccine",
-    .home == "Anaheim Ducks" & .date > "2021-12-15" ~ "both",
-    .home == "Anaheim Ducks" & .date > "2021-10-01" ~ "vaccine", 
-    .home == "Arizona Coyotes" & .date > "2021-10-01" ~ "none",
-    .home == "Atlanta Hawks" & .date > "2021-10-01" ~ "none", 
-    .home == "Boston Bruins" & .date >= "2022-03-05" ~ "none",  
-    .home == "Boston Bruins" & .date >= "2022-02-21" ~ "mask",
-    .home == "Boston Bruins" & .date >= "2021-10-01" ~ "both", 
-    .home == "Boston Celtics" & .date >= "2022-03-05" ~ "none",  
-    .home == "Boston Celtics" & .date >= "2022-02-21" ~ "mask", 
-    .home == "Boston Celtics" & .date >= "2021-10-01" ~ "both", 
-    .home == "Brooklyn Nets" & .date >= "2022-03-07" ~ "none", 
-    .home == "Brooklyn Nets" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Buffalo Sabres" & .date > "2022-02-28" ~ "none", 
-    .home == "Buffalo Sabres" & .date > "2021-10-01" ~ "vaccine", 
-    .home == "Carolina Hurricanes" & .date > "2022-02-28" ~ "none", 
-    .home == "Carolina Hurricanes" & .date > "2021-10-01" ~ "mask", 
-    .home == "Columbus Blue Jackets" & .date > "2021-10-01" ~ "none", 
-    .home == "Chicago Bulls" & .date >= "2022-03-22" ~ "none",
-    .home == "Chicago Bulls" & .date >= "2022-03-04" ~ "vaccine", 
-    .home == "Chicago Bulls" & .date >= "2021-10-01" ~ "both",
-    .home == "Charlotte Hornets" & .date >= "2022-02-28" ~ "none",
-    .home == "Charlotte Hornets" & .date >= "2021-10-01" ~ "mask",
-    .home == "Chicago Blackhawks" & .date >= "2022-03-22" ~ "none",
-    .home == "Chicago Blackhawks" & .date >= "2022-03-03" ~ "vaccine", 
-    .home == "Chicago Blackhawks" & .date >= "2021-10-01" ~ "both",
-    .home == "Chicago Bulls" & .date >= "2022-03-22" ~ "none",
-    .home == "Chicago Bulls" & .date >= "2022-03-04" ~ "vaccine", 
-    .home == "Chicago Bulls" & .date >= "2021-10-01" ~ "both",
-    .home == "Cleveland Cavaliers" & .date >= "2022-02-01" ~ "none",
-    .home == "Cleveland Cavaliers" & .date >= "2021-12-31" ~ "mask",
-    .home == "Cleveland Cavaliers" & .date >= "2021-10-01" ~ "none",
-    .home == "Colorado Avalanche" & .date >= "2022-03-12" ~ "none",
-    .home == "Colorado Avalanche" & .date >= "2021-10-01" ~ "both",
-    .home == "Dallas Mavericks" & .date >= "2022-03-03" ~ "none",
-    .home == "Dallas Mavericks" & .date >= "2021-11-15" ~ "mask",
-    .home == "Dallas Mavericks" & .date >= "2021-10-01" ~ "both",
-    .home == "Dallas Stars" & .date >= "2022-03-03" ~ "none", # bad data potentially
-    .home == "Dallas Stars" & .date >= "2021-10-01" ~ "mask",
-    .home == "Denver Nuggets" & .date >= "2022-03-12" ~ "none",
-    .home == "Denver Nuggets" & .date >= "2021-10-01" ~ "both",
-    .home == "Detroit Pistons" & .date >= "2021-10-01" ~ "none",
-    .home == "Detroit Red Wings" & .date >= "2021-10-01" ~ "none",
-    .home == "Florida Panthers" & .date >= "2021-10-01" ~ "none",
-    .home == "Golden State Warriors" & .date >= "2022-04-01" ~ "none",
-    .home == "Golden State Warriors" & .date >= "2022-02-16" ~ "vaccine",
-    .home == "Golden State Warriors" & .date >= "2021-10-01" ~ "both",
-    .home == "Houston Rockets" & .date >= "2021-10-01" ~ "none",
-    .home == "Indiana Pacers" & .date >= "2021-10-01" ~ "none",
-    .home == "Los Angeles Clippers" & .date >= "2022-04-01" ~ "none",
-    .home == "Los Angeles Clippers" & .date >= "2022-02-25" ~ "vaccine",
-    .home == "Los Angeles Clippers" & .date >= "2021-10-01" ~ "both",
-    .home == "Los Angeles Kings" & .date >= "2022-04-01" ~ "none",
-    .home == "Los Angeles Kings" & .date >= "2022-02-25" ~ "vaccine",
-    .home == "Los Angeles Kings" & .date >= "2021-10-01" ~ "both",
-    .home == "Los Angeles Lakers" & .date >= "2022-04-01" ~ "none",
-    .home == "Los Angeles Lakers" & .date >= "2022-02-25" ~ "vaccine",
-    .home == "Los Angeles Lakers" & .date >= "2021-10-01" ~ "both",
-    .home == "Minnesota Wild" & .date >= "2022-02-28" ~ "none",
-    .home == "Minnesota Wild" & .date >= "2022-02-10" ~ "mask",
-    .home == "Minnesota Wild" & .date >= "2022-01-06" ~ "both",
-    .home == "Minnesota Wild" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Nashville Predators" & .date >= "2021-11-13" ~ "none",
-    .home == "Nashville Predators" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Memphis Grizzlies" & .date >= "2021-11-24" ~ "none",
-    .home == "Memphis Grizzlies" & .date >= "2021-10-01" ~ "both",
-    .home == "New Jersey Devils" & .date >= "2022-03-02" ~ "none",
-    .home == "New Jersey Devils" & .date >= "2022-01-10" ~ "both",
-    .home == "New Jersey Devils" & .date >= "2022-12-22" ~ "mask",
-    .home == "New Jersey Devils" & .date >= "2021-10-01" ~ "none",
-    .home == "New York Islanders" & .date >= "2022-02-17" ~ "none",
-    .home == "New York Islanders" & .date >= "2021-10-01" ~ "both",
-    .home == "New York Rangers" & .date >= "2022-03-07" ~ "none",
-    .home == "New York Rangers" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Pittsburgh Penguins" & .date >= "2021-10-01" ~ "none",
-    .home == "San Jose Sharks" & .date >= "2021-03-28" ~ "none",
-    .home == "San Jose Sharks" & .date >= "2022-03-02" ~ "vaccine",
-    .home == "San Jose Sharks" & .date >= "2021-10-01" ~ "both",
-    .home == "St. Louis Blues" & .date >= "2022-03-06" ~ "none",
-    .home == "St. Louis Blues" & .date >= "2021-10-01" ~ "both",
-    .home == "Tampa Bay Lightning" & .date >= "2021-10-01" ~ "none",
-    .home == "Vegas Golden Knights" & .date >= "2022-02-10" ~ "none",
-    .home == "Vegas Golden Knights" & .date >= "2021-10-01" ~ "mask",
-    .home == "Washington Capitals" & .date >= "2022-03-01" ~ "none",
-    .home == "Washington Capitals" & .date >= "2022-02-15" ~ "mask",
-    .home == "Washington Capitals" & .date >= "2022-01-15" ~ "both",
-    .home == "Washington Capitals" & .date >= "2021-10-01" ~ "mask",
-    .home == "Miami Heat" & .date >= "2022-02-26" ~ "none",
-    .home == "Miami Heat" & .date >= "2021-10-1" ~ "mask",
-    .home == "Milwaukee Bucks" & .date >= "2022-03-02" ~ "none",
-    .home == "Milwaukee Bucks" & .date >= "2022-01-01" ~ "mask",
-    .home == "Milwaukee Bucks" & .date >= "2021-10-1" ~ "none",
-    .home == "Minnesota Timberwolves" & .date >= "2022-02-28" ~ "none",
-    .home == "Minnesota Timberwolves" & .date >= "2022-02-24" ~ "vaccine",
-    .home == "Minnesota Timberwolves" & .date >= "2022-01-26" ~ "both",
-    .home == "Minnesota Timberwolves" & .date >= "2022-01-16" ~ "mask",
-    .home == "Minnesota Timberwolves" & .date >= "2021-10-01" ~ "none",
-    .home == "New Orleans Pelicans" & .date >= "2022-03-22" ~ "none", 
-    .home == "New Orleans Pelicans" & .date >= "2022-03-03" ~ "vaccine",
-    .home == "New Orleans Pelicans" & .date >= "2021-10-01" ~ "both",
-    .home == "New York Knicks" & .date >= "2022-03-07" ~ "none",
-    .home == "New York Knicks" & .date >= "2021-10-01" ~ "both",
-    .home == "Oklahoma City Thunder" & .date >= "2022-01-15" ~ "none",
-    .home == "Oklahoma City Thunder" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Orlando Magic" & .date >= "2021-10-01" ~ "none",
-    .home == "Philadelphia 76ers" & .date >= "2022-03-02" ~ "none",
-    .home == "Philadelphia 76ers" & .date >= "2022-02-06" ~ "mask",
-    .home == "Philadelphia 76ers" & .date >= "2022-01-03" ~ "both",
-    .home == "Philadelphia 76ers" & .date >= "2021-10-01" ~ "mask",
-    .home == "Philadelphia Flyers" & .date >= "2022-03-02" ~ "none",
-    .home == "Philadelphia Flyers" & .date >= "2022-02-06" ~ "mask",
-    .home == "Philadelphia Flyers" & .date >= "2022-01-03" ~ "both",
-    .home == "Philadelphia Flyers" & .date >= "2021-10-01" ~ "mask",
-    .home == "Phoenix Suns" & .date >= "2021-10-01" ~ "none",
-    .home == "Portland Trail Blazers" & .date >= "2022-03-12" ~ "none",
-    .home == "Portland Trail Blazers" & .date >= "2021-10-01" ~ "both",
-    .home == "Sacramento Kings" & .date >= "2022-04-01" ~ "none",
-    .home == "Sacramento Kings" & .date >= "2022-03-22" ~ "vaccine",
-    .home == "Sacramento Kings" & .date >= "2021-10-01" ~ "both",
-    .home == "San Antonio Spurs" & .date >= "2021-10-01" ~ "none",
-    .home == "Utah Jazz" & .date >= "2022-02-25" ~ "none",
-    .home == "Utah Jazz" & .date >= "2022-01-21" ~ "vaccine",
-    .home == "Utah Jazz" & .date >= "2022-01-08" ~ "both",
-    .home == "Utah Jazz" & .date >= "2021-10-01" ~ "vaccine",
-    .home == "Washington Wizards" & .date >= "2022-03-01" ~ "none",
-    .home == "Washington Wizards" & .date >= "2022-02-15" ~ "mask",
-    .home == "Washington Wizards" & .date >= "2022-01-15" ~ "both",
-    .home == "Washington Wizards" & .date >= "2021-10-01" ~ "mask",
-    T ~ NA_character_
-  )
-}
   
 # merge everything together, prep for regression
 dat.final <- dat.nba %>% 
@@ -574,7 +353,7 @@ dat.final <- dat.nba %>%
   ), .after = game_time_num) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
   mutate(weekday = weekdays(date), .after = date) %>% 
-  mutate(across(contains("_w"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  # mutate(across(contains("_w"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% # I'm going to fix this at the dat.covid level.
   mutate(policy = case_when(is.na(policy) ~ "none", T ~ policy)) %>% 
   mutate(month = month(date, label = T, abbr = F) %>% as.character(), .before = weekday) %>% 
   mutate(season_wins = str_sub(home_record, 1L, 2L), .before = home_record) %>% 
@@ -588,8 +367,7 @@ dat.final <- dat.nba %>%
               select(season, home, season_wins_scaled),
             by = c("season", "home")) %>% 
   relocate(season_wins_scaled, .after = season_wins) %>% 
-  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both")))
-  
+  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 10748 obs - 3/23/2023
   
 # Leaflet Data -----------------------------------------------------------------
 
@@ -696,3 +474,12 @@ dat.leaflet.cbsa <- dat.leaflet %>%
 #
 
 
+
+
+
+
+
+
+
+
+# 
