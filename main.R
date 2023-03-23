@@ -4,7 +4,7 @@
 ############################################################################## #  
 
 # had to make a copy of libgdal.32.dylib and rename is libgdal.31.dylib
-# install.packages("terra", type = "source", configure.args = c("--with-sqlite3-lib=/usr/local/Cellar/squlite/3.40.1/lib", "--with-proj-lib=/usr/local/Cellar/proj/9.1.1/lib"))
+# install.packages("terra", type = "source", configure.args = c("--with-sqlite3-lib=/usr/local/Cellar/squlite/3.41.1/lib", "--with-proj-lib=/usr/local/Cellar/proj/9.2.0/lib"))
 # Stanislaus county is techincally neighboring two CBSA but probably should just be one - may not be an issue anymore
 
 # packages
@@ -587,7 +587,9 @@ dat.final <- dat.nba %>%
               ungroup() %>% 
               select(season, home, season_wins_scaled),
             by = c("season", "home")) %>% 
-  relocate(season_wins_scaled, .after = season_wins)
+  relocate(season_wins_scaled, .after = season_wins) %>% 
+  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both")))
+  
   
 # Leaflet Data -----------------------------------------------------------------
 

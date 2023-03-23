@@ -4,18 +4,18 @@
 
 # Attendance Tables ------------------------------------------------------------
 
-# League-level Statistics
+# League-level
 dat.final %>% 
   group_by(league) %>% 
   summary_stats(attendance_per) %>% 
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3))))
-# League-level Home-level Statistics
+# League-level Home-level standard deviation
 dat.final %>% 
   group_by(league, home) %>% 
-  summarize(home_var = pvar(attendance_per))%>% 
+  summarize(home_sd = psd(attendance_per))%>% 
   ungroup() %>% 
   group_by(league) %>% 
-  summary_stats("home_var") %>% 
+  summary_stats("home_sd") %>% 
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3))))
 
 # League-Season-level Statistics
@@ -23,13 +23,13 @@ dat.final %>%
   group_by(league, season) %>% 
   summary_stats(attendance_per, yes_median = T) %>% 
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3)))) 
-# League-Season-level Home-team Statistics
+# League-Season-level Home-team standard deviation
 dat.final %>% 
   group_by(league, season, home) %>% 
-  summarize(home_var = pvar(attendance_per))%>% 
+  summarize(home_sd = psd(attendance_per))%>% 
   ungroup() %>% 
   group_by(league, season) %>% 
-  summary_stats("home_var") %>% 
+  summary_stats("home_sd") %>% 
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3))))
 
 # Home-level Statistics
