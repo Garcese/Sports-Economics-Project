@@ -50,13 +50,13 @@ dat.final %>%
 dat.final %>% 
   filter(season == "2021-22") %>% 
   group_by(league) %>% 
-  summary_stats(cbsa_w_n_cases:l_neigh_w_n_deaths, yes_median = T) 
+  summary_stats(cbsa_w_n_cases, neigh_w_n_deaths, yes_median = T) 
 
 # Single Team
 dat.final %>% 
   filter(season == "2021-22") %>% 
   filter(home == "New York Knicks") %>% 
-  summary_stats(cbsa_w_n_cases:l_neigh_w_n_deaths, yes_median = T) 
+  summary_stats(cbsa_w_n_cases, neigh_w_n_deaths, yes_median = T) 
 
 # Attendance Plots -------------------------------------------------------------
 
@@ -84,7 +84,7 @@ plot.attendance <- dat.final %>%
 # Covid-19 Plots ---------------------------------------------------------------
 
 # Per CBSA
-cbsa_plot <- function(.home) {
+cbsa_covid_plot <- function(.home, .imputed = T) {
   # get the right season length
   if (.home %in% (dat.final %>% filter(league == "NBA") %>% pull(home))) {
     dat.lower <- "2021-10-18"
@@ -94,12 +94,16 @@ cbsa_plot <- function(.home) {
     dat.lower <- "2021-10-11"
     dat.upper <- "2022-04-30"
   }
+  var1 <- if (.imputed) "cbsa_w_i_n_cases" else "cbsa_w_n_cases"
+  var2 <- if (.imputed) "neigh_w_i_n_cases" else "neigh_w_n_cases"
+  var3 <- if (.imputed) "cbsa_w_i_n_deaths" else "cbsa_w_n_deaths"
+  var4 <- if (.imputed) "neigh_w_i_n_deaths" else "neigh_w_n_deaths"
   # cases plot
   plot.cases <- dat.covid %>%
     unnest(home) %>%
     filter(home == .home) %>%
     filter(date > dat.lower & date < dat.upper) %>%
-    select(date, cbsa_w_n_cases, neigh_w_n_cases) %>% 
+    select(date, all_of(c(var1, var2))) %>% 
     distinct() %>% 
     set_colnames(c("date", "Weekly New Cases", "Neighboring Weekly New Cases")) %>%
     pivot_longer(`Weekly New Cases`:`Neighboring Weekly New Cases`) %>%
@@ -130,7 +134,7 @@ cbsa_plot <- function(.home) {
     unnest(home) %>%
     filter(home == .home) %>%
     filter(date > dat.lower & date < dat.upper) %>%
-    select(date, cbsa_w_n_deaths, neigh_w_n_deaths) %>% 
+    select(date, all_of(c(var3, var4))) %>% 
     distinct() %>% 
     set_colnames(c("date", "Weekly New Deaths", "Neighboring Weekly New Deaths")) %>%
     pivot_longer(`Weekly New Deaths`:`Neighboring Weekly New Deaths`) %>%
@@ -165,7 +169,31 @@ cbsa_plot <- function(.home) {
     plot_layout(widths = c(.05, 1))
 }
 
-cbsa_plot(.home = "Nashville Predators")
+cbsa_covid_plot(.home = "Dallas Stars", .imputed = T)
+
+# Covid-19 Plots Over Season ---------------------------------------------------
+
+league_covid_plot <- function(.league, .var, .color) {
+  # get the right season length
+  if (.league %in% c("NBA", "NHL")) {
+    dat <- dat.final %>% filter(league == .league)
+  }
+  else {
+    dat <- dat.final
+  }
+  # graph
+  dat %>% filter(season == "2021-22") %>% 
+    ggplot(aes(x = date, y = !!sym(.var), color = !!sym(.color))) + 
+    geom_point() + 
+    geom_hline(yintercept = 0) +
+    scale_x_date(date_labels = "%b", date_breaks = "1 month") +
+    scale_y_continuous(labels = percent_format(scale = 1)) +
+    labs(
+      title = paste(.league, .var)
+    )
+}
+
+league_covid_plot(.league = "BOTH", .var = "cbsa_w_n_cases", .color = "policy")
 
 # Policy Graph -----------------------------------------------------------------
 
@@ -219,7 +247,7 @@ plot.policies <- tibble(
 # Regressions ------------------------------------------------------------------
 
 # NBA, without IV
-feols(attendance_per ~ cbsa_w_n_cases + adj_home_odds + season_wins_scaled + game_time_approx | # controls
+feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + season_wins_scaled + game_time_approx | # controls
         home + away + weekday + season, # fixed effects
       data = filter(dat.final, league == "NBA") %>% 
         filter(season == "2021-22"),

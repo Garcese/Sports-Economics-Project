@@ -192,41 +192,43 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
     .x <= 0 ~ NA,
     T ~ .x
-  ))) %>% 
+  ),
+  .names = "i_{col}"
+  )) %>% 
   group_by(cbsa, fips) %>% 
-  mutate(across(n_cases:n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
-  mutate(across(n_cases:n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
+  mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
   # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
   # ... at the end of the data set, so we are fine setting them to 0.
   # gets the rolling weekly cases figure, and the lag of that.
-  mutate(across(n_cases:n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
+  mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
                 .names = "w_{col}")) %>% 
-  mutate(across(w_n_cases:w_n_deaths, ~ lag(get(cur_column()), 7),
+  mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
                 .names = "l_{col}")) %>% 
   ungroup() %>% # aggregate to cbsa levels
   left_join( 
     filter(., central_outlying != "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
+      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
       ungroup() %>% 
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_w_n_cases:cbsa_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
-      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_n_deaths),
+      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
     filter(., central_outlying == "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
+      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
       ungroup() %>% 
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
-      mutate(across(neigh_w_n_cases:neigh_w_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
-      select(date, cbsa, neigh_w_n_cases:l_neigh_w_n_deaths),
+      select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
     by = c("date", "cbsa")) # 187775 obs. you get errors from my_impute function
 
 # Betting Data -----------------------------------------------------------------
