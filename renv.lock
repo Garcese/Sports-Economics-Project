@@ -95,7 +95,7 @@
     },
     "RCurl": {
       "Package": "RCurl",
-      "Version": "1.98-1.10",
+      "Version": "1.98-1.12",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -103,7 +103,7 @@
         "bitops",
         "methods"
       ],
-      "Hash": "35136c52e39f2679ebbe7bf448e3bd5a"
+      "Hash": "1d6ed2d006d483f31c6d5531f3a39923"
     },
     "Rcpp": {
       "Package": "Rcpp",

@@ -353,9 +353,9 @@ dat.final <- dat.nba %>%
     18 <= game_time_num & game_time_num <= 20 ~ "Evening Game",
     game_time_num > 20 ~ "Night Game" 
   ), .after = game_time_num) %>% 
+  mutate(game_time_approx = factor(game_time_approx, levels = c("Evening Game", "Early Game", "Night Game"))) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
   mutate(weekday = weekdays(date), .after = date) %>% 
-  # mutate(across(contains("_w"), ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% # I'm going to fix this at the dat.covid level.
   mutate(policy = case_when(is.na(policy) ~ "none", T ~ policy)) %>% 
   mutate(month = month(date, label = T, abbr = F) %>% as.character(), .before = weekday) %>% 
   mutate(season_wins = str_sub(home_record, 1L, 2L), .before = home_record) %>% 
@@ -458,30 +458,4 @@ dat.leaflet.cbsa <- dat.leaflet %>%
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 #
-
-
-
-#
-
-
-
-
-
-
-
-
-
-
-# 
