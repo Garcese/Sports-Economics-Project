@@ -122,7 +122,7 @@ cbsa_covid_plot <- function(.home, .imputed = T) {
     labs(
       title = paste("New Weekly Covid-19 Cases/Deaths for the", .home),
       y = "Cases/Deaths per Population (%)"
-      ) + 
+    ) + 
     theme(
       axis.text.x = element_blank(),
       axis.title.x = element_blank(),
@@ -193,7 +193,7 @@ league_covid_plot <- function(.league, .var, .color) {
     )
 }
 
-league_covid_plot(.league = "BOTH", .var = "cbsa_w_n_cases", .color = "policy")
+league_covid_plot(.league = "NHL", .var = "cbsa_w_n_cases", .color = "policy")
 
 # Policy Graph -----------------------------------------------------------------
 
@@ -205,7 +205,7 @@ plot.policies <- tibble(
     unique() %>% 
     map(~rep(.x, 200)) %>% 
     unlist()
-  ) %>% 
+) %>% 
   separate(leage_home, into = c("league", "home"), extra = "merge") %>% 
   mutate(policy = policy_func(home, date)) %>% 
   filter(!(league == "NBA" & date < "2021-10-20")) %>% 
@@ -247,9 +247,9 @@ plot.policies <- tibble(
 # Regressions ------------------------------------------------------------------
 
 # NBA, without IV
-feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + game_time_approx + policy + i(policy, cbsa_w_i_n_cases, "none") | # controls
+feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + game_time_approx + policy | # controls
         home + away + weekday + season, # fixed effects
-      data = filter(dat.final, league == "NBA") %>% 
+      data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
       vcov = ~home
 ) %>% 

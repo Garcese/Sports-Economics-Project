@@ -100,13 +100,13 @@ dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function th
   group_by(id) %>% 
   summarize(id_neigh = list(unique(id_neigh))) %>% 
   ungroup() %>% 
-  set_colnames(c("fips", "fips_neighbors")) # 3214 observations - 3/23/2023
+  set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 4/27/2023
 
 # clean population data for merge
 dat.population <- read_csv("assets/cbsa_data/dat.population.csv") %>% 
   filter(variable == "POP") %>% 
   select(2, 4) %>% 
-  set_colnames(c("fips", "pop"))
+  set_colnames(c("fips", "pop")) # 3220 obs, 2 vars - 4/27/2023
 
 # clean CBSA data
 dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default = "c")) %>% 
@@ -155,7 +155,7 @@ dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default 
   group_by(cbsa, temp) %>% 
   mutate(cbsa_pop = sum(pop)) %>% 
   ungroup(temp) %>% 
-  select(-temp) # 729 observations - 3/23/2023
+  select(-temp) # 729 obs, 12 vars - 4/27/2023
 # 313 unique CBSA-only fips, 416 neighbor-only fips, 403 unique neighbor-only fips. ...
 # ... 23 duplicates. 13 neighbor-neighbor duplicates, 10 neighbor-cbsa duplicates. ...
 # ... together, there are 313 + 403 - 10 = 706 unique fips
@@ -229,13 +229,13 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-    by = c("date", "cbsa")) # 187775 obs. you get errors from my_impute function
+    by = c("date", "cbsa")) # 187775 obs, 40 vars  - 4/27/2023. you get errors from my_impute function
 
 # Betting Data -----------------------------------------------------------------
 
 # load already cleaned betting data
 attach_source("bet.R", "betting_data")
-dat.bet <- load_clean_bet() # 13320 obs
+dat.bet <- load_clean_bet() # 13320 obs, 7 vars - 4/27/2023
 
 # Game Data Cleaning -----------------------------------------------------------
 
@@ -261,7 +261,7 @@ dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 6158 observati
     date == "2017-11-08" & home == "Orlando Magic" ~ "Attendance: 18,803", # https://www.nba.com/game/nyk-vs-orl-0021700160
     T ~ attendance
   )) %>% 
-  mutate(league = "NBA", .after = date) # 5933 obs
+  mutate(league = "NBA", .after = date) # 5933 obsk 12 vars - 4/27/2023
 
 # clean NHL data 
 dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observations
@@ -307,7 +307,7 @@ dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observati
                                  "8:00 PM, October 8, 2015", "8:00 PM, October 8, 2015",
                                  "7:30 PM, October 8, 2015"))) %>% 
   arrange(date) %>% 
-  mutate(league = "NHL", .after = date) # 4815 obs
+  mutate(league = "NHL", .after = date) # 4815 obs, 12 vars - 4/27/2023
 
 # Final Merge ------------------------------------------------------------------
   
@@ -369,7 +369,7 @@ dat.final <- dat.nba %>%
               select(season, home, season_wins_scaled),
             by = c("season", "home")) %>% 
   relocate(season_wins_scaled, .after = season_wins) %>% 
-  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 10748 obs - 3/23/2023
+  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 10748 obs, 44 vars - 4/27/2023
   
 # Leaflet Data -----------------------------------------------------------------
 
@@ -457,5 +457,3 @@ dat.leaflet.cbsa <- dat.leaflet %>%
 
 
 
-
-#
