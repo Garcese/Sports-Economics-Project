@@ -1,9 +1,9 @@
 ############################################################################## #
 ### Main File for sports econ paper
-### gtarcese@gmail.com - 10/5/2022
 ############################################################################## #  
 
 # packages
+library(car) # vif function
 library(expp) # neighbors data frame function. this messes with view() function, and probably lots of others
 library(fastDummies)
 library(fixest) # regression stuff
@@ -37,13 +37,15 @@ helper$my_attach(helper)
 
 # cbsa data (from totalcensus package)
 data("dict_cbsa")
-write_csv(dict_cbsa, "assets/cbsa_data/raw.cbsa.csv")
+# write_csv(dict_cbsa, "assets/cbsa_data/raw.cbsa.csv")
 
 # covid-19 data (NewYorkTimes)
+nytRaw2020 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2020.csv")
 nytRaw2021 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2021.csv")
 nytRaw2022 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2022.csv")
-write_csv(read_csv(nytRaw2021), "assets/covid_data/raw.covid2021.csv")
-write_csv(read_csv(nytRaw2022), "assets/covid_data/raw.covid2022.csv")
+# write_csv(read_csv(nytRaw2020), "assets/covid_data/raw.covid2020.csv")
+# write_csv(read_csv(nytRaw2021), "assets/covid_data/raw.covid2021.csv")
+# write_csv(read_csv(nytRaw2022), "assets/covid_data/raw.covid2022.csv")
 
 # import data scraping objects
 attach_source("scrape.R", "data_scraping")
@@ -56,6 +58,8 @@ raw.nba.2016 <- scrape_season(nbaSeasons[2] %>% reduce(c), "nba")
 raw.nba.2017 <- scrape_season(nbaSeasons[3] %>% reduce(c), "nba")
 # 2018-19 season. 1232 observations -> 1230 games, 1 allstar game, USA game
 raw.nba.2018 <- scrape_season(nbaSeasons[4] %>% reduce(c), "nba")
+# 2019-2020 season, up to covid. 975 observations -> 971, 1 allstar game, USA game, Thunder game and Kings game cancelled on 3/11/2020
+raw.nba.2019 <- scrape_season(nbaSeasons[6] %>% reduce(c), "nba", new = T)
 # NBA 2021-22 season. 1231 observations -> 1230 games, 1 allstar game
 raw.nba.2021 <- scrape_season(nbaSeasons[5] %>% reduce(c), "nba")
 
@@ -68,24 +72,28 @@ raw.nhl.2016 <- scrape_season(nhlSeasons[2] %>% reduce(c), "nhl")
 raw.nhl.2017 <- scrape_season(nhlSeasons[3] %>% reduce(c), "nhl")
 # 2018-19 season. 1274 observations -> 1271 games, 3 allstar games
 raw.nhl.2018 <- scrape_season(nhlSeasons[4] %>% reduce(c), "nhl")
+# 2019-2020 season, up to covid. 1085 observations -> 1082 games, 3 allstar games
+raw.nhl.2019 <- scrape_season(nhlSeasons[6] %>% reduce(c), "nhl", new = T)
 # NHL 2021-22 season. 1413 observations -> 1312 games, 3 allstar games, 98 postponed. Kraken joined
 raw.nhl.2021 <- scrape_season(nhlSeasons[5] %>% reduce(c), "nhl")
 
 # write the data
-mass_write("assets/game_data/nba/", game_data_names %includes% "nba")
-mass_write("assets/game_data/nhl/", game_data_names %includes% "nhl")
+# mass_write("assets/game_data/nba/", game_data_names %includes% "nba")
+# mass_write("assets/game_data/nhl/", game_data_names %includes% "nhl")
+write_csv(raw.nhl.2019, "assets/game_data/nhl/raw.nhl.2019.csv")
+
 
 # betting data 
 attach_source("bet.R", "betting_data")
-write_bet("assets/betting_data/")
+# write_bet("assets/betting_data/")
 
 # collect Raw data, tigris package function
 counties(cb = TRUE, resolution = "500k") %>% # 500k is best resolution
-  saveRDS(file = "assets/leaflet/2020_fips_shapes.rds") # geometry doesn't save nicely as CSV
+  # saveRDS(file = "assets/leaflet/2020_fips_shapes.rds") # geometry doesn't save nicely as CSV
 
 # tidycensus package. Newest is 2019 apparently
 get_estimates(geography = "county", product = "population", year = 2019) %>% 
-  write_csv("assets/cbsa_data/dat.population.csv")
+  # write_csv("assets/cbsa_data/dat.population.csv")
 
 # FIP/CBSA Data ----------------------------------------------------------------
 
@@ -231,23 +239,89 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
     by = c("date", "cbsa")) # 187775 obs, 40 vars  - 4/27/2023. you get errors from my_impute function
 
+dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>% 
+  as_tibble() %>% 
+  relocate(fips, state, .before = county) %>% 
+  # The 5 boroughs are listed as "New York City" in county var, and NA in fips. ...
+  # ... I made it so NYC all under Bronx fip. 309 unique cbsa fips now. So 313 + 403 - 4 - 10 = 702 unique fips
+  mutate(fips = case_when(county == "New York City" ~ "36005", T ~ fips)) %>% 
+  filter(fips %in% (dat.cbsa %>% pull(fips))) %>% 
+  # Jan 6th 2020 is the first monday of the year, and april 5th is a sunday
+  filter("2020-01-05" <= date & date <= "2020-04-05") %>% # keep a day before 2020-01-05 for lag calculation
+  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", relationship = "many-to-many") %>% 
+  relocate(cbsa:home, .after = date) %>% 
+  relocate(central_outlying:cbsa_pop, .after = county) %>% 
+  mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
+  group_by(fips, cbsa) %>% # need central_outlying to adequately identify counties, since we have duplicates.
+  mutate(across(cases:deaths, ~case_when( # create new cases and deaths
+    row_number() == 1 ~ NA_real_, 
+    T ~ .x - lag(.x)
+  ), 
+  .names = "n_{col}"
+  )) %>%  
+  ungroup() %>% 
+  filter(date > "2020-01-05") %>% # we just needed this to calculate new cases for 2020-01-06
+  # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
+  # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
+  mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
+    .x <= 0 ~ NA,
+    T ~ .x
+  ),
+  .names = "i_{col}"
+  )) %>% 
+  group_by(cbsa, fips) %>% 
+  mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
+  mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
+  # ... at the end of the data set, so we are fine setting them to 0.
+  # gets the rolling weekly cases figure, and the lag of that.
+  mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
+                .names = "w_{col}")) %>% 
+  mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
+                .names = "l_{col}")) %>% 
+  ungroup() %>% # aggregate to cbsa levels
+  left_join( 
+    filter(., central_outlying != "Neighboring") %>% 
+      distinct(date, cbsa, fips, .keep_all = T) %>%
+      group_by(date, cbsa) %>% 
+      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
+      ungroup() %>% 
+      distinct(date, cbsa, .keep_all = T) %>% 
+      group_by(cbsa) %>% # add one week lag
+      mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
+    by = c("date", "cbsa")) %>% 
+  left_join( # aggregate to cbsa levels
+    filter(., central_outlying == "Neighboring") %>% 
+      distinct(date, cbsa, fips, .keep_all = T) %>%
+      group_by(date, cbsa) %>% 
+      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
+      ungroup() %>% 
+      distinct(date, cbsa, .keep_all = T) %>% 
+      group_by(cbsa) %>% # add one week lag
+      mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
+    by = c("date", "cbsa")) # 13019 obs, 40 vars  - 4/27/2023. you get errors from my_impute function
+
 # Betting Data -----------------------------------------------------------------
 
 # load already cleaned betting data
 attach_source("bet.R", "betting_data")
-dat.bet <- load_clean_bet() # 13320 obs, 7 vars - 4/27/2023
+dat.bet <- load_clean_bet() # 13320 obs, 7 vars - 4/27/2023. Now 15373 - 5/31/2023
 
 # Game Data Cleaning -----------------------------------------------------------
 
 # clean NBA data 
-dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 6158 observations
+dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 7133 observations
   as_tibble() %>% 
   mutate(across(everything(), ~str_replace(.x, "\\?", ""))) %>% 
-  filter(home_record != "") %>% # -7 -> remove allstar, USA games
-  filter(home_score != "NA") %>% # -1 -> removes postponed game
-  filter(home != "Toronto Raptors") %>% # -205, 41*5
+  filter(home_record != "") %>% # -9 -> remove allstar, USA games
+  filter(home_score != "NA") %>% # -3 -> removes postponed game (1) and 2 cancelled 3/11/2020 covid games
+  filter(home != "Toronto Raptors") %>% # -237, 41*5 + 32 games from 2019-20 season
   filter(stadium %notin% c("Arena Ciudad de Mexico", "Mexico City Arena", "O2 Arena (ENG)", 
-  "UW-Milwaukee Panther Arena")) %>% # -12 -> this last stadium was only played in one time
+  "UW-Milwaukee Panther Arena", "Accor Arena")) %>% # -15 -> this last *2* stadium(s) was (were) only played in one time
   mutate(across(home:away, ~case_when( 
     .x == "LA Clippers" ~ "Los Angeles Clippers",
     T ~ .x
@@ -261,22 +335,22 @@ dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 6158 observati
     date == "2017-11-08" & home == "Orlando Magic" ~ "Attendance: 18,803", # https://www.nba.com/game/nyk-vs-orl-0021700160
     T ~ attendance
   )) %>% 
-  mutate(league = "NBA", .after = date) # 5933 obsk 12 vars - 4/27/2023
+  mutate(league = "NBA", .after = date) # 5869 obs 12 vars - 5/31/2023
 
 # clean NHL data 
-dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observations
+dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 7508 observations
   as_tibble() %>% 
   mutate(across(everything(), ~str_replace(.x, "\\?", ""))) %>% 
-  filter(home_record != "") %>% # -15 -> remove allstar games
-  filter(home_score != "NA") %>% # -101 -> removes postponed game
+  filter(home_record != "") %>% # -18 -> remove allstar games
+  filter(home_score != "NA") %>% # -101 -> removes postponed game, none in 2019-20 season
   filter(home %notin% c("Calgary Flames", "Edmonton Oilers", "Montreal Canadiens", 
                         "Ottawa Senators", "Toronto Maple Leafs", "Vancouver Canucks", 
-                        "Winnipeg Jets", "Seattle Kraken")) %>% # -1476, 41*7*5 + 41 (Kraken)
-  filter(stadium %notin% c("Citi Field", "Ericsson Globe", "Hartwall Areena", 
+                        "Winnipeg Jets", "Seattle Kraken")) %>% # -1723, 41*7*5 + 41 (Kraken) + 247 (from 2019 season)
+  filter(stadium %notin% c("Avicii Arena", "Citi Field", "Ericsson Globe", "Hartwall Areena", 
                            "Lincoln Financial Field", "Navy-Marine Corps Memorial Stadium",
                            "Nissan Stadium", "Notre Dame Stadium", "Scandinavium",
                            "Target Field", "Tim Hortons Field", "Scotiabank Arena", 
-                           "NA", "Rogers Place")) %>% # -23. NA just seems to be winter classics
+                           "NA", "Rogers Place", "O2 Arena")) %>% # -28. NA just seems to be winter classics. Diffiuclt to tell how many teach season, as some were played by canadian teams and already filtered out above
   # Add in missing games from -> https://www.espn.com/nhl/boxscore/_/gameId/400814774
   # https://www.hockey-reference.com/boxscores/201510080BUF.html https://www.espn.com/nhl/game/_/gameId/400814776
   # https://www.hockey-reference.com/boxscores/201510080DAL.html https://www.espn.com/nhl/game/_/gameId/400814778
@@ -307,7 +381,7 @@ dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 6423 observati
                                  "8:00 PM, October 8, 2015", "8:00 PM, October 8, 2015",
                                  "7:30 PM, October 8, 2015"))) %>% 
   arrange(date) %>% 
-  mutate(league = "NHL", .after = date) # 4815 obs, 12 vars - 4/27/2023
+  mutate(league = "NHL", .after = date) # 5645 obs, 12 vars - 5/31/2023
 
 # Final Merge ------------------------------------------------------------------
   

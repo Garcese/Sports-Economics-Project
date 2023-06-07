@@ -2,15 +2,56 @@
 title: "R Notebook"
 keep_md: yes
 ---
-```{r}
+```{r, fig.width = 6, fig.height = 4}
 plot.attendance
 ```
-```{r}
+```{r, fig.width = 6, fig.height = 5}
+(league_covid_plot(.league = "NBA", .var = "cbsa_w_i_n_cases") + 
+   theme(
+     axis.title.x = element_blank(),
+     axis.text.x = element_blank()
+     ) +
+  labs(
+    title = "COVID-19 Cases and Deaths in NBA Home Team Cities",
+    subtitle = "During the 2021-22 Regular Season",
+    y = "7-day COVID-19\nNew Cases Rate"
+  )
+) / 
+  league_covid_plot(.league = "NBA", .var = "cbsa_w_i_n_deaths") + 
+  labs(
+    y = "7-day COVID-19\nNew Deaths Rate"
+  )
+```
+```{r, fig.width = 6, fig.height = 5}
+(league_covid_plot(.league = "NHL", .var = "cbsa_w_n_cases") + 
+   theme(
+     axis.title.x = element_blank(),
+     axis.text.x = element_blank()
+     ) +
+  labs(
+    title = "COVID-19 Cases and Deaths in NHL Home Team Cities",
+    subtitle = "During the 2021-22 Regular Season",
+    y = "7-day COVID-19\nNew Cases Rate"
+  )
+) / 
+  league_covid_plot(.league = "NHL", .var = "cbsa_w_i_n_deaths") + 
+  labs(
+    y = "7-day COVID-19\nNew Deaths Rate"
+  )
+```
+```{r, fig.width = 6, fig.height = 5}
+
+league_covid_plot(.league = "NA", .var = "cbsa_w_i_n_cases", .color = "Policy") + 
+  facet_wrap(~league, nrow = 2) + 
+    labs(
+    title = "COVID-19 Cases Home Team Cities With Policies",
+    subtitle = "During the NBA and NHL 2021-22 Regular Season",
+    y = "7-day COVID-19\nNew Cases Rate"
+  )
+```
+```{r, fig.width = 6, fig.height = 4}
 plot.policies
 ```
-
-
-
 
 
 

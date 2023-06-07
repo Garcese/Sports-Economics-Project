@@ -50,7 +50,7 @@ dat.final %>%
 dat.final %>% 
   filter(season == "2021-22") %>% 
   group_by(league) %>% 
-  summary_stats(cbsa_w_n_cases, neigh_w_n_deaths, yes_median = T) 
+  summary_stats(cbsa_w_n_cases:neigh_w_n_deaths, yes_median = T) 
 
 # Single Team
 dat.final %>% 
@@ -75,11 +75,11 @@ plot.attendance <- dat.final %>%
   ) + 
   geom_hline(yintercept = 0) + 
   labs(
-    title = "Distribution of Attendance per Capcity",
+    title = "Distribution of Attendance Rate",
     subtitle = "2015-2018 Seasons VS. 2021 Season",
-    x = "Percent Attendance",
+    x = "Attendance Rate",
     y = "Density",
-  ) 
+  )
 
 # Covid-19 Plots ---------------------------------------------------------------
 
@@ -173,7 +173,7 @@ cbsa_covid_plot(.home = "Dallas Stars", .imputed = T)
 
 # Covid-19 Plots Over Season ---------------------------------------------------
 
-league_covid_plot <- function(.league, .var, .color) {
+league_covid_plot <- function(.league, .var, .color = NULL) {
   # get the right season length
   if (.league %in% c("NBA", "NHL")) {
     dat <- dat.final %>% filter(league == .league)
@@ -181,19 +181,44 @@ league_covid_plot <- function(.league, .var, .color) {
   else {
     dat <- dat.final
   }
+  # if a color var is specified, use it
+  if(!is.null(.color)) {
+    plot <- dat %>% 
+      rename("Policy" = policy) %>% 
+      mutate(Policy = case_when(
+        Policy == "none" ~ "None",
+        Policy == "mask" ~ "Mask",
+        Policy == "vaccine" ~ "Vaccine",
+        T ~ "Both"
+      )) %>% 
+      mutate(Policy = factor(Policy, levels = c("None", "Mask", "Vaccine", "Both"))) %>% 
+      filter(season == "2021-22") %>% 
+      ggplot(aes(x = date, y = !!sym(.var), color = !!sym(.color)))
+  } else {
+    plot <- dat %>% 
+      rename("Policy" = policy) %>% 
+      mutate(Policy = case_when(
+        Policy == "none" ~ "None",
+        Policy == "mask" ~ "Mask",
+        Policy == "vaccine" ~ "Vaccine",
+        T ~ "Both"
+      )) %>% 
+      mutate(Policy = factor(Policy, levels = c("None", "Mask", "Vaccine", "Both"))) %>% 
+      filter(season == "2021-22") %>% 
+      ggplot(aes(x = date, y = !!sym(.var)))
+  }
   # graph
-  dat %>% filter(season == "2021-22") %>% 
-    ggplot(aes(x = date, y = !!sym(.var), color = !!sym(.color))) + 
+  plot +
     geom_point() + 
     geom_hline(yintercept = 0) +
     scale_x_date(date_labels = "%b", date_breaks = "1 month") +
     scale_y_continuous(labels = percent_format(scale = 1)) +
     labs(
-      title = paste(.league, .var)
+      x = "Date",
     )
 }
 
-league_covid_plot(.league = "NHL", .var = "cbsa_w_n_cases", .color = "policy")
+league_covid_plot(.league = "NA", .var = "cbsa_w_n_cases", .color = "Policy") + facet_wrap(~league, nrow = 2)
 
 # Policy Graph -----------------------------------------------------------------
 
@@ -239,30 +264,49 @@ plot.policies <- tibble(
   guides(color = guide_legend(keyheight = c(1, 1, 1, 1.5))) + 
   labs(
     title = "Covid-19 Policy Types in the NBA and NHL",
-    subtitle = "Over the 2021-22 Season",
-    x = "Date (2021-22)",
-    y = "Percent Teams\nWith Policy"
+    subtitle = "Over the 2021-22 Regular Season",
+    x = "Date",
+    y = "Proportion of Teams\nWith Policy"
   ) 
+
+# Policy Table -----------------------------------------------------------------
+
+dat.final %>% 
+  filter(season == "2021-22") %>% 
+  group_by(league, policy) %>% 
+  summarize(
+    n = n()
+  ) %>% 
+  ungroup() %>% 
+  group_by(league) %>% 
+  mutate(nprop = n/sum(n))
 
 # Regressions ------------------------------------------------------------------
 
-# NBA, without IV
-feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + game_time_approx + policy | # controls
-        home + away + weekday + season, # fixed effects
+# without IV
+feols(attendance_per ~cbsa_w_i_n_cases + adj_home_odds + game_time_approx | # controls
+        home + away + weekday, # fixed effects
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
       vcov = ~home
 ) %>% 
   etable(tex = T)
-# NBA, with IV
-feols(attendance_per ~ adj_home_odds + policy | # controls
+# with IV
+feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
         home + away + weekday | # fixed effects
-        cbsa_w_n_cases ~ l_neigh_w_n_cases, # instrument
+        cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases, # instrument
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
       vcov = ~home
 ) %>% 
   etable(tex = T)
+# silly interactions
+feols(attendance_per ~cbsa_w_i_n_cases + policy + cbsa_w_i_n_cases*policy + adj_home_odds + game_time_approx | # controls
+        home + away + weekday, # fixed effects
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+)
 
 # Golden state warriors and tampa bay lightning were at 100% capacity for EVERY SINGLE GAME in the 5 seasons
 # NBA teams with 0 variance in 2021-22 (Heat is very low variance)
@@ -274,7 +318,47 @@ c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")
 # NHL teams with the highest variance
 c("Buffalo Sabres", "Arizona Coyotes", "New Jersey Devils", "San Jose Sharks", "Los Angeles Kings")
 
+feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
+        home + away + weekday |
+        cbsa_w_i_n_cases + i(policy, cbsa_w_i_n_cases, "none") ~ l_neigh_w_i_n_cases + i(policy, l_neigh_w_i_n_cases, "none"),  # fixed effects
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+) %>% 
+  summary(stage = 1)
 
+feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
+        home + away + weekday |
+        cbsa_w_i_n_cases + i(policy, cbsa_w_i_n_cases, "none") ~ l_neigh_w_i_n_cases + i(policy, l_neigh_w_i_n_cases, "none"),  # fixed effects
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+) %>% 
+  summary(stage = 1)
 
+test <- feols(cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases + policy + i(policy, l_neigh_w_i_n_cases, "none") + adj_home_odds + game_time_approx | # controls
+                home + away + weekday,
+              data = filter(dat.final, league == "NBA") %>%
+                filter(season == "2021-22"),
+              vcov = ~home
+)
 
-#
+feols(attendance_per ~ haha + policy + i(policy, haha, "none") + adj_home_odds + game_time_approx | # controls
+        home + away + weekday,
+      data = filter(dat.final, league == "NBA") %>%
+        filter(season == "2021-22") %>%
+        cbind(test$fitted.values) %>%
+        rename("haha" = `test$fitted.values`),
+      vcov = ~home
+)
+# New Stuff!
+feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + game_time_approx + season_wins_scaled | # controls
+        home + away + weekday + season + month,
+      data = filter(dat.final, league == "NHL") %>% 
+        mutate(cbsa_w_i_n_cases = case_when(
+          is.na(cbsa_w_i_n_cases) ~ 0,
+          T ~ cbsa_w_i_n_cases 
+        )),
+      vcov = ~home
+)
+

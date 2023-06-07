@@ -2,6 +2,9 @@
 ### Load Betting data From https://www.sportsbookreviewsonline.com/
 ############################################################################## #
 
+# I believe the URL has changed - 6/1/2023
+# https://www.sportsbookreviewsonline.com/scoresoddsarchives/nhl-odds-2019-20/
+
 # downloads and writes betting data to directory
 write_bet <- function(.path) {
   # assemble urls to data. 
