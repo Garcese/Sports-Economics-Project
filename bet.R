@@ -4,6 +4,7 @@
 
 # I believe the URL has changed - 6/1/2023
 # https://www.sportsbookreviewsonline.com/scoresoddsarchives/nhl-odds-2019-20/
+# 2020/01/17 the data says that detroit is at pittsburgh, and it's the other way around. Changed in the raw data itself. 6/14/2023
 
 # downloads and writes betting data to directory
 write_bet <- function(.path) {

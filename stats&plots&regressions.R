@@ -327,21 +327,19 @@ feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
 ) %>% 
   summary(stage = 1)
 
-feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
-        home + away + weekday |
-        cbsa_w_i_n_cases + i(policy, cbsa_w_i_n_cases, "none") ~ l_neigh_w_i_n_cases + i(policy, l_neigh_w_i_n_cases, "none"),  # fixed effects
-      data = filter(dat.final, league == "NBA") %>% 
-        filter(season == "2021-22"),
+feols(attendance_per ~ season + adj_home_odds + game_time_approx + season_wins_scaled | # controls
+        home + away + weekday,
+      data = filter(dat.final, league == "NHL"),
       vcov = ~home
 ) %>% 
   summary(stage = 1)
 
-test <- feols(cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases + policy + i(policy, l_neigh_w_i_n_cases, "none") + adj_home_odds + game_time_approx | # controls
-                home + away + weekday,
-              data = filter(dat.final, league == "NBA") %>%
-                filter(season == "2021-22"),
-              vcov = ~home
-)
+# test <- feols(cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases + policy + i(policy, l_neigh_w_i_n_cases, "none") + adj_home_odds + game_time_approx | # controls
+#                 home + away + weekday,
+#               data = filter(dat.final, league == "NBA") %>%
+#                 filter(season == "2021-22"),
+#               vcov = ~home
+# )
 
 feols(attendance_per ~ haha + policy + i(policy, haha, "none") + adj_home_odds + game_time_approx | # controls
         home + away + weekday,

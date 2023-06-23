@@ -443,7 +443,11 @@ dat.final <- dat.nba %>%
               select(season, home, season_wins_scaled),
             by = c("season", "home")) %>% 
   relocate(season_wins_scaled, .after = season_wins) %>% 
-  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 10748 obs, 44 vars - 4/27/2023
+  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) %>% # 10748 obs, 44 vars - 4/27/2023
+  mutate(across(contains("_w_"), ~case_when(
+    is.na(.x) ~ 0,
+    T ~ .x
+  )))
   
 # Leaflet Data -----------------------------------------------------------------
 
@@ -527,6 +531,10 @@ dat.leaflet.cbsa <- dat.leaflet %>%
   select(cbsa, cbsa_geometry) %>% 
   distinct(cbsa_geometry) %>% 
   saveRDS("dat.leaflet.cbsa.rds")
+
+
+
+
 
 
 
