@@ -2,11 +2,12 @@
 ### Load Betting data From https://www.sportsbookreviewsonline.com/
 ############################################################################## #
 
-# I believe the URL has changed - 6/1/2023
+# I believe the URL has changed - 6/25/2023
 # https://www.sportsbookreviewsonline.com/scoresoddsarchives/nhl-odds-2019-20/
 # 2020/01/17 the data says that detroit is at pittsburgh, and it's the other way around. Changed in the raw data itself. 6/14/2023
+# additionally, the 2/29/2020 Arizona Coyotes game was called "Arizonas" so I fixed it - 6/25/2023
 
-# downloads and writes betting data to directory
+# downloads and writes betting data to directory - this might not work anymore, didn't test - 6/25/2023
 write_bet <- function(.path) {
   # assemble urls to data. 
   years <- c("2015-16", "2016-17", "2017-18", "2018-19", "2021-22")
@@ -101,6 +102,18 @@ team_name_help <- function(.team, .nba = T) {
 }
 # clean data
 load_clean_bet <- function() {
+  
+  check_vh_variable <- function(data) { # credit to chatGPT for this. Or whoever chatGPT "learned" it from.
+    expected_pattern <- c("V", "H")  # Define the expected pattern here
+    
+    # Check if VH column matches the expected pattern
+    if (!identical(data$VH, rep(expected_pattern, length.out = nrow(data)))) {
+      stop("Condition failed at row(s): ", paste0(which(data$VH != expected_pattern), collapse = ", "))
+    }
+    
+    return(data)
+  }
+  
   rawEnvir <- new.env()
   mass_load("./assets/betting_data/", rawEnvir)
   cleanEnvir <- new.env()
@@ -111,6 +124,7 @@ load_clean_bet <- function() {
       filter(VH != "N") %>% # must be like games in London/Mexico, it was only like 3 though.
       select(Date, VH, Team, mlName) %>% 
       set_colnames(c("date", "VH", "home", "home_odds")) %>% 
+      check_vh_variable() %>% 
       mutate(home = team_name_help(home, str_detect(obj, "nba"))) %>% 
       left_join(mutate(., away_odds = lag(home_odds)) %>% 
                   filter(VH == "H") %>% 

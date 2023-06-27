@@ -4,8 +4,6 @@
 
 theme_set(theme_bw())
 options(scipen=999)
-# expp package masks this and that messes with view()
-as.data.frame <- base::as.data.frame
 
 # General ----------------------------------------------------------------------
 

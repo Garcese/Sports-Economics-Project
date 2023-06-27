@@ -281,34 +281,125 @@ dat.final %>%
   group_by(league) %>% 
   mutate(nprop = n/sum(n))
 
+# Instrument Graph -------------------------------------------------------------
+
+plot_instrument <- function(.league = "NBA") {
+  
+dat.instrument <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>%
+  select(GEOID, geometry) %>% 
+  mutate(geometry = st_transform(geometry, '+proj=longlat +datum=WGS84')) %>% # prevents leaflet warnings
+  rename(fips = GEOID) %>% 
+  bind_rows(filter(., fips %in% c("36005", "36047", "36061", "36081", "36085")) %>% summarize(fips = "36005", geometry = st_union(geometry))) %>% 
+  filter(row_number() != 471) %>% # removes the original bronx fips, with the aggregated one above
+  left_join(dat.covid %>% 
+              distinct(fips, .keep_all = TRUE) %>% 
+              select(cbsa, cbsa_title, county, fips, central_outlying), 
+            by = "fips") %>% 
+  filter(!is.na(cbsa)) %>%  # removes fips we aren't studying. 702 total, as expected.
+  mutate(adjacent = case_when(
+    central_outlying == "Neighboring" ~ "Central",
+    T ~ "Adjacent"
+  )) %>% # code below figures out if the fip is in an NBA only, NHL only, or Both city
+  mutate(league = case_when(
+    cbsa_title %in% (dat.final %>% filter(league == "NBA") %>% pull(cbsa_title)) &
+      cbsa_title %in% (dat.final %>% filter(league == "NHL") %>% pull(cbsa_title)) ~ "Both",
+    cbsa_title %in% (dat.final %>% filter(league == "NBA") %>% pull(cbsa_title)) ~ "NBA",
+    T ~ "NHL"
+  ))
+  
+dat.stadiums <- data.frame(
+  stadium = c("Amalie Arena", "American Airlines Center", "Amway Center", "AT&T Center", "Ball Arena",
+              "Barclays Center", "Bridgestone Arena", "Capital One Arena", "Chase Center",
+              "crypto.com Arena", "Enterprise Center", "FedExForum", "Fiserv Forum", "FLA Live Arena",
+              "Footprint Center", "FTX Arena", "Gainbridge Fieldhouse", "Gila River Arena", "Golden 1 Center", "Honda Center",
+              "KeyBank Center", "Little Caesars Arena", "Madison Square Garden", "Moda Center",
+              "Nationwide Arena", "Paycom Center", "PNC Arena", "PPG Paints Arena", "Prudential Center",
+              "Rocket Mortgage FieldHouse", "SAP Center at San Jose", "Smoothie King Center",
+              "Spectrum Center", "State Farm Arena", "Target Center", "TD Garden", "T-Mobile Arena",
+              "Toyota Center (Houston)", "UBS Arena", "United Center", "Vivint Arena", "Wells Fargo Center",
+              "Xcel Energy Center"),
+  latitude = c(27.9429, 32.7904, 28.5397, 29.4268, 39.7488, 40.6823, 36.1588, 38.8982, 37.7679, 
+               34.0434, 38.6267, 35.1381, 43.0450, 26.1585, 33.4458, 25.7814, 39.7637, 33.5317, 
+               38.5802, 33.8078, 42.8749, 42.3409, 40.7503, 45.5314, 39.9692, 35.4633, 35.8033, 
+               40.4396, 40.7335, 41.4965, 37.3328, 29.9492, 35.2250, 33.7571, 44.9794, 42.3662, 
+               36.1025, 29.7506, 40.7117, 41.8805, 40.7681, 39.9010, 44.9447),
+  longitude <- c(-82.4518, -96.8106, -81.3839, -98.4369, -105.0081, -73.9749, -86.7786, -77.0213, 
+                 -122.3875, -118.2669, -90.2028, -90.0509, -87.9178, -80.3257, -112.0714, -80.1878, 
+                 -86.1552, -112.2611, -121.4998, -117.8768, -78.8768, -83.0552, -73.9935, -122.6668, 
+                 -83.0064, -97.5152, -78.7221, -79.9893, -74.1709, -81.6883, -121.9012, -90.0823, 
+                 -80.8395, -84.3963, -93.2762, -71.0619, -115.1785, -95.3621, -73.7259, -87.6744, 
+                 -111.9011, -75.1720, -93.1012)
+  ) %>% 
+  set_colnames(c("stadium", "latitude", "longitude")) %>% # why I have to do this I have no idea
+  mutate(league = case_when( # code below figures out if the stadium is in an NBA only, NHL only, or Both city
+    stadium %in% (dat.final %>% filter(league == "NBA" & season == "2021-22") %>% pull(stadium)) &
+      stadium %in% (dat.final %>% filter(league == "NHL" & season == "2021-22") %>% pull(stadium)) ~ "Both",
+    stadium %in% (dat.final %>% filter(league == "NBA" & season == "2021-22") %>% pull(stadium)) ~ "NBA",
+    T ~ "NHL"
+  ))
+# assemble the graph
+ggplot() +
+  borders("state", col = "gray") + # using maps package
+  geom_sf(data = dat.instrument %>% filter(league == "Both" | league == !!.league), aes(fill = adjacent)) +
+  geom_point(data = dat.stadiums %>% filter(league == "Both" | league == !!.league), aes(x = longitude, y = latitude), color = "red", size = 1) +
+  # geom_sf_text(data = st_as_sf(data.frame(lon = -98.5, lat = 22.5), coords = c("lon", "lat"), crs = 4326),
+  #              aes(label = "Red dots ( ) mark US-based NBA and NHL Stadium locations for the 2021-22 season"),
+  #              color = "black", size = 4) +
+  # geom_sf_text(data = st_as_sf(data.frame(lon = -118, lat = 22.5), coords = c("lon", "lat"), crs = 4326),
+  #              aes(label = "\u25cf"),
+  #              color = "red", size = 4) +
+  scale_fill_manual(values = c("#777777", "#CCCCCC"), labels = c("Central", "Adjacent")) +
+  labs(fill = "County Type", title = paste(.league, "Teams and Associated Counties")) +
+  theme_void() +
+  theme(legend.position = c(0.9, 0.3),
+        plot.title = element_text(hjust = 0.1, margin = margin(b = -5))
+  )
+}
+
 # Regressions ------------------------------------------------------------------
 
-# without IV
-feols(attendance_per ~cbsa_w_i_n_cases + adj_home_odds + game_time_approx | # controls
-        home + away + weekday, # fixed effects
+# Table 1/2 - game level controls, away team fixed effects, month fixed effects
+feols(attendance_per ~ scale(cbsa_w_i_n_deaths) + adj_home_odds + game_time_approx |
+        home + away + month + weekday,
       data = filter(dat.final, league == "NHL") %>% 
-        filter(season == "2021-22"),
-      vcov = ~home
-) %>% 
-  etable(tex = T)
-# with IV
-feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
-        home + away + weekday | # fixed effects
-        cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases, # instrument
-      data = filter(dat.final, league == "NHL") %>% 
-        filter(season == "2021-22"),
-      vcov = ~home
-) %>% 
-  etable(tex = T)
-# silly interactions
-feols(attendance_per ~cbsa_w_i_n_cases + policy + cbsa_w_i_n_cases*policy + adj_home_odds + game_time_approx | # controls
-        home + away + weekday, # fixed effects
-      data = filter(dat.final, league == "NBA") %>% 
         filter(season == "2021-22"),
       vcov = ~home
 )
-
-# Golden state warriors and tampa bay lightning were at 100% capacity for EVERY SINGLE GAME in the 5 seasons
+# Table 3 - No Policy, IV
+feols(attendance_per ~ adj_home_odds + game_time_approx |
+        home + away + weekday | # fixed effects
+        scale(cbsa_w_i_n_cases) ~ scale(l_neigh_w_i_n_cases),
+      data = filter(dat.final, league == "NHL") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+) %>% 
+  summary(stage = 1)
+# Table 3 - Policy, IV
+feols(attendance_per ~ policy + adj_home_odds + game_time_approx |
+        home + away + weekday |
+        scale(cbsa_w_i_n_cases) ~ scale(l_neigh_w_i_n_cases),
+      data = filter(dat.final, league == "NHL") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+) %>% 
+  summary(stage = 1)
+# Table 4 - Policy, IV, Interactions
+feols(attendance_per ~  policy + adj_home_odds + game_time_approx |
+        home + away + weekday |
+        scale(cbsa_w_i_n_cases) + scale(i(policy, cbsa_w_i_n_cases, "none")) ~ scale(l_neigh_w_i_n_cases) + scale(i(policy, l_neigh_w_i_n_cases, "none")),
+      data = filter(dat.final, league == "NBA") %>% 
+        filter(season == "2021-22"),
+      vcov = ~home
+) %>% 
+  summary(stage = 1)
+# Table 5 - All Seasons
+feols(attendance_per ~ season + season_wins_scaled + adj_home_odds + game_time_approx |
+        home + away + weekday,
+      data = filter(dat.final, league == "NHL"),# %>% 
+        # filter(season != "2019-20"),
+      vcov = ~home
+)
+# Golden state warriors and Tampa bay lightning were at 100% capacity for EVERY SINGLE GAME in the 5 seasons
 # NBA teams with 0 variance in 2021-22 (Heat is very low variance)
 c("Boston Celtics", "Golden State Warriors", "Utah Jazz")
 # NBA teams with the highest variance (Top 5)
@@ -318,45 +409,4 @@ c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")
 # NHL teams with the highest variance
 c("Buffalo Sabres", "Arizona Coyotes", "New Jersey Devils", "San Jose Sharks", "Los Angeles Kings")
 
-feols(attendance_per ~ policy + adj_home_odds + game_time_approx | # controls
-        home + away + weekday |
-        cbsa_w_i_n_cases + i(policy, cbsa_w_i_n_cases, "none") ~ l_neigh_w_i_n_cases + i(policy, l_neigh_w_i_n_cases, "none"),  # fixed effects
-      data = filter(dat.final, league == "NBA") %>% 
-        filter(season == "2021-22"),
-      vcov = ~home
-) %>% 
-  summary(stage = 1)
-
-feols(attendance_per ~ season + adj_home_odds + game_time_approx + season_wins_scaled | # controls
-        home + away + weekday,
-      data = filter(dat.final, league == "NHL"),
-      vcov = ~home
-) %>% 
-  summary(stage = 1)
-
-# test <- feols(cbsa_w_i_n_cases ~ l_neigh_w_i_n_cases + policy + i(policy, l_neigh_w_i_n_cases, "none") + adj_home_odds + game_time_approx | # controls
-#                 home + away + weekday,
-#               data = filter(dat.final, league == "NBA") %>%
-#                 filter(season == "2021-22"),
-#               vcov = ~home
-# )
-
-feols(attendance_per ~ haha + policy + i(policy, haha, "none") + adj_home_odds + game_time_approx | # controls
-        home + away + weekday,
-      data = filter(dat.final, league == "NBA") %>%
-        filter(season == "2021-22") %>%
-        cbind(test$fitted.values) %>%
-        rename("haha" = `test$fitted.values`),
-      vcov = ~home
-)
-# New Stuff!
-feols(attendance_per ~ cbsa_w_i_n_cases + adj_home_odds + game_time_approx + season_wins_scaled | # controls
-        home + away + weekday + season + month,
-      data = filter(dat.final, league == "NHL") %>% 
-        mutate(cbsa_w_i_n_cases = case_when(
-          is.na(cbsa_w_i_n_cases) ~ 0,
-          T ~ cbsa_w_i_n_cases 
-        )),
-      vcov = ~home
-)
 

@@ -3,18 +3,20 @@
 ############################################################################## #  
 
 # packages
-library(car) # vif function
+library(car) # vif function, doesn't seem to work with feols objects though - 6/25/2023
 library(expp) # neighbors data frame function. this messes with view() function, and probably lots of others
+as.data.frame <- base::as.data.frame
 library(fastDummies)
 library(fixest) # regression stuff
 library(htmltools) # for leaflet
 library(httr) # data-scraping
 library(leaflet)
-library(lubridate)
-library(magrittr)
+library(lubridate) # dates
+library(magrittr) # set_colnames function
+library(maps) # US map tiles
 library(openxlsx)
 library(patchwork) 
-library(performance)
+library(performance) # not sure if I actually us this ... - 6/25/2023
 library(renv)
 library(RCurl) # needed for something ...
 library(rsconnect)
@@ -108,13 +110,13 @@ dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function th
   group_by(id) %>% 
   summarize(id_neigh = list(unique(id_neigh))) %>% 
   ungroup() %>% 
-  set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 4/27/2023
+  set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 6/25/2023
 
 # clean population data for merge
 dat.population <- read_csv("assets/cbsa_data/dat.population.csv") %>% 
   filter(variable == "POP") %>% 
   select(2, 4) %>% 
-  set_colnames(c("fips", "pop")) # 3220 obs, 2 vars - 4/27/2023
+  set_colnames(c("fips", "pop")) # 3220 obs, 2 vars - 6/25/2023
 
 # clean CBSA data
 dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default = "c")) %>% 
@@ -128,9 +130,9 @@ dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default 
            as.character())) %>% # all 36 unique cbsas. 27 unique NBA, 21 unique NHL. 313 FIPS
   unite("fips", state:county, sep = "") %>% 
   separate(cbsa_title, into = c("cbsa_title", "cbsa_states"), sep = ", ") %>% 
-  mutate(cbsa_states = map(cbsa_states, ~str_split(.x, "-")[[1]] %>% c())) %>% 
+  mutate(cbsa_states = cbsa_states %>% str_split("-")) %>% 
   mutate(home = assign_home(cbsa), .after = cbsa_title) %>% 
-  mutate(home = map(home, ~str_split(.x, ",")[[1]] %>% c())) %>% 
+  mutate(home = home %>% str_split(",")) %>% 
   mutate(time_zone = cbsa_to_time(cbsa), .after = cbsa_states) %>% 
   group_by(cbsa) %>% 
   mutate(cbsa_fips = list(unique(fips)), .after = time_zone) %>% # all FIPs in a cbsa, in a list
@@ -163,10 +165,12 @@ dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default 
   group_by(cbsa, temp) %>% 
   mutate(cbsa_pop = sum(pop)) %>% 
   ungroup(temp) %>% 
-  select(-temp) # 729 obs, 12 vars - 4/27/2023
+  select(-temp) %>% 
+  ungroup()
+# 729 obs, 12 vars - 6/25/2023
 # 313 unique CBSA-only fips, 416 neighbor-only fips, 403 unique neighbor-only fips. ...
 # ... 23 duplicates. 13 neighbor-neighbor duplicates, 10 neighbor-cbsa duplicates. ...
-# ... together, there are 313 + 403 - 10 = 706 unique fips
+# ... together, there are 313 + 403 - 10 = 706 unique fips. This includes all 5 boroughs, so really 702.
 
 # Covid-19 Data ----------------------------------------------------------------
 
@@ -223,7 +227,7 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
@@ -235,10 +239,11 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-    by = c("date", "cbsa")) # 187775 obs, 40 vars  - 4/27/2023. you get errors from my_impute function
+    by = c("date", "cbsa")) # 187775 obs, 40 vars  - 6/25/2023. you get errors from my_impute function
 
+# THIS IS CURRENTLY NOT BEING USED. WE AREN'T USING COVID-19 DATA IN THE MULTI-SEASON REGRESSION
 dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>% 
   as_tibble() %>% 
   relocate(fips, state, .before = county) %>% 
@@ -289,7 +294,7 @@ dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
@@ -301,15 +306,15 @@ dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100/cbsa_pop)) %>% 
+      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-    by = c("date", "cbsa")) # 13019 obs, 40 vars  - 4/27/2023. you get errors from my_impute function
+    by = c("date", "cbsa")) # 13019 obs, 40 vars  - 6/25/2023. you get errors from my_impute function
 
 # Betting Data -----------------------------------------------------------------
 
 # load already cleaned betting data
 attach_source("bet.R", "betting_data")
-dat.bet <- load_clean_bet() # 13320 obs, 7 vars - 4/27/2023. Now 15373 - 5/31/2023
+dat.bet <- load_clean_bet() # 15373, 7 vars - 6/25/2023
 
 # Game Data Cleaning -----------------------------------------------------------
 
@@ -335,7 +340,7 @@ dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 7133 observati
     date == "2017-11-08" & home == "Orlando Magic" ~ "Attendance: 18,803", # https://www.nba.com/game/nyk-vs-orl-0021700160
     T ~ attendance
   )) %>% 
-  mutate(league = "NBA", .after = date) # 5869 obs 12 vars - 5/31/2023
+  mutate(league = "NBA", .after = date) # 6869 obs 12 vars - 6/25/2023
 
 # clean NHL data 
 dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 7508 observations
@@ -350,12 +355,12 @@ dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 7508 observati
                            "Lincoln Financial Field", "Navy-Marine Corps Memorial Stadium",
                            "Nissan Stadium", "Notre Dame Stadium", "Scandinavium",
                            "Target Field", "Tim Hortons Field", "Scotiabank Arena", 
-                           "NA", "Rogers Place", "O2 Arena")) %>% # -28. NA just seems to be winter classics. Diffiuclt to tell how many teach season, as some were played by canadian teams and already filtered out above
+                           "NA", "Rogers Place", "O2 Arena")) %>% # -28. NA just seems to be winter classics. Difficult to tell how many each season, as some were played by Canadian teams and already filtered out above
   # Add in missing games from -> https://www.espn.com/nhl/boxscore/_/gameId/400814774
   # https://www.hockey-reference.com/boxscores/201510080BUF.html https://www.espn.com/nhl/game/_/gameId/400814776
   # https://www.hockey-reference.com/boxscores/201510080DAL.html https://www.espn.com/nhl/game/_/gameId/400814778
   # https://www.hockey-reference.com/boxscores/201510080STL.html https://www.espn.com/nhl/game/_/gameId/400814780
-  bind_rows(tibble(date = rep("2015-10-08", 7),
+  bind_rows(tibble(date = rep("2015-10-08", 7), # adds in 7 missings observations from 2015-16 season
                    home = c("Boston Bruins", "Buffalo Sabres", "Colorado Avalanche",
                             "Dallas Stars","Nashville Predators", "St. Louis Blues", 
                             "Tampa Bay Lightning"),
@@ -381,7 +386,7 @@ dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 7508 observati
                                  "8:00 PM, October 8, 2015", "8:00 PM, October 8, 2015",
                                  "7:30 PM, October 8, 2015"))) %>% 
   arrange(date) %>% 
-  mutate(league = "NHL", .after = date) # 5645 obs, 12 vars - 5/31/2023
+  mutate(league = "NHL", .after = date) # 5645 obs, 12 vars - 6/25/2023
 
 # Final Merge ------------------------------------------------------------------
   
@@ -447,7 +452,7 @@ dat.final <- dat.nba %>%
   mutate(across(contains("_w_"), ~case_when(
     is.na(.x) ~ 0,
     T ~ .x
-  )))
+  ))) # 12514 obs, 44 vars - 6/27/2023
   
 # Leaflet Data -----------------------------------------------------------------
 
@@ -531,6 +536,9 @@ dat.leaflet.cbsa <- dat.leaflet %>%
   select(cbsa, cbsa_geometry) %>% 
   distinct(cbsa_geometry) %>% 
   saveRDS("dat.leaflet.cbsa.rds")
+
+
+
 
 
 

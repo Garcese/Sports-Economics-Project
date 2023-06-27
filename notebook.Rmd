@@ -40,7 +40,6 @@ plot.attendance
   )
 ```
 ```{r, fig.width = 6, fig.height = 5}
-
 league_covid_plot(.league = "NA", .var = "cbsa_w_i_n_cases", .color = "Policy") + 
   facet_wrap(~league, nrow = 2) + 
     labs(
@@ -52,7 +51,12 @@ league_covid_plot(.league = "NA", .var = "cbsa_w_i_n_cases", .color = "Policy") 
 ```{r, fig.width = 6, fig.height = 4}
 plot.policies
 ```
-
+```{r, fig.width = 6, fig.height = 4}
+plot_instrument(.league = "NBA")
+```
+```{r, fig.width = 6, fig.height = 4}
+plot_instrument(.league = "NHL")
+```
 
 
 
