@@ -123,7 +123,8 @@ load_clean_bet <- function() {
     get(obj, envir = rawEnvir) %>% 
       filter(VH != "N") %>% # must be like games in London/Mexico, it was only like 3 though.
       select(Date, VH, Team, mlName) %>% 
-      set_colnames(c("date", "VH", "home", "home_odds")) %>% 
+      set_colnames(c("date", "VH", "home", "home_odds")) %>%
+      mutate(home_odds = as.numeric(home_odds)) %>% 
       check_vh_variable() %>% 
       mutate(home = team_name_help(home, str_detect(obj, "nba"))) %>% 
       left_join(mutate(., away_odds = lag(home_odds)) %>% 
@@ -143,7 +144,7 @@ load_clean_bet <- function() {
         T ~ paste(year + 1, paste0("0", str_sub(date, 1L, 1L)), str_sub(date, 2L, 3L), sep = "-")
       )) %>%
       mutate(date = as.Date(date)) %>%
-      mutate(season = paste0(as.character(year), "-", str_sub(as.character(year + 1), 3L, 4L)), .after = date) %>% 
+      # mutate(season = paste0(as.character(year), "-", str_sub(as.character(year + 1), 3L, 4L)), .after = date) %>% 
       assign(str_replace(obj, "raw", "dat"), ., envir = cleanEnvir) 
   }
   dat.bet <- NULL

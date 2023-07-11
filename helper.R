@@ -118,7 +118,7 @@ my_impute <- function(.vec) {
         filledVec[i] <- .vec[i]/lagDist
       }
     }
-    replace(filledVec, is.na(filledVec), NA) # replace any existing NAs on the boundaries with NA.
+    replace(filledVec, is.na(filledVec), NA) # replace any existing NAs on the boundaries with NA. Specifically RHS boundary.
   }
 }
 # mass load all csvs in a directory
@@ -127,13 +127,13 @@ mass_load <- function(.src, .pos, .bind = F) {
   if (.bind) {
     dat.binded <- NULL
     for (file in files) {
-      dat.binded <- bind_rows(dat.binded, read_csv(paste0(.src, file)))
+      dat.binded <- bind_rows(dat.binded, read_csv(paste0(.src, file), col_types = cols(.default = "c")))
     }
     dat.binded
   }
   else {
     for (file in files) {
-      assign(str_sub(file, 1L, -5L), read_csv(paste0(.src, file)), pos = .pos)
+      assign(str_sub(file, 1L, -5L), read_csv(paste0(.src, file), col_types = cols(.default = "c")), pos = .pos)
     }
   }
 }
@@ -380,7 +380,7 @@ policy_func <- function(.home, .date) {
     .home == "Chicago Bulls" & .date >= "2022-03-22" ~ "none",
     .home == "Chicago Bulls" & .date >= "2022-03-04" ~ "vaccine", 
     .home == "Chicago Bulls" & .date >= "2021-10-01" ~ "both",
-    .home == "Charlotte Hornets" & .date >= "2022-02-28" ~ "none",
+    .home == "Charlotte Hornets" & .date >= "2022-02-28" ~ "none", # to be super thorough, check this shouldn't be the 26th 6/27/2023
     .home == "Charlotte Hornets" & .date >= "2021-10-01" ~ "mask",
     .home == "Chicago Blackhawks" & .date >= "2022-03-22" ~ "none",
     .home == "Chicago Blackhawks" & .date >= "2022-03-03" ~ "vaccine", 

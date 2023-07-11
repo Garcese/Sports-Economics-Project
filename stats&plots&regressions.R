@@ -363,7 +363,7 @@ feols(attendance_per ~ scale(cbsa_w_i_n_deaths) + adj_home_odds + game_time_appr
         home + away + month + weekday,
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
-      vcov = ~home
+      cluster = ~home, addintercept = T
 )
 # Table 3 - No Policy, IV
 feols(attendance_per ~ adj_home_odds + game_time_approx |
@@ -371,7 +371,7 @@ feols(attendance_per ~ adj_home_odds + game_time_approx |
         scale(cbsa_w_i_n_cases) ~ scale(l_neigh_w_i_n_cases),
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
-      vcov = ~home
+      cluster = ~home
 ) %>% 
   summary(stage = 1)
 # Table 3 - Policy, IV
@@ -380,7 +380,7 @@ feols(attendance_per ~ policy + adj_home_odds + game_time_approx |
         scale(cbsa_w_i_n_cases) ~ scale(l_neigh_w_i_n_cases),
       data = filter(dat.final, league == "NHL") %>% 
         filter(season == "2021-22"),
-      vcov = ~home
+      cluster = ~home
 ) %>% 
   summary(stage = 1)
 # Table 4 - Policy, IV, Interactions
@@ -389,7 +389,7 @@ feols(attendance_per ~  policy + adj_home_odds + game_time_approx |
         scale(cbsa_w_i_n_cases) + scale(i(policy, cbsa_w_i_n_cases, "none")) ~ scale(l_neigh_w_i_n_cases) + scale(i(policy, l_neigh_w_i_n_cases, "none")),
       data = filter(dat.final, league == "NBA") %>% 
         filter(season == "2021-22"),
-      vcov = ~home
+      cluster = ~home
 ) %>% 
   summary(stage = 1)
 # Table 5 - All Seasons
@@ -397,8 +397,10 @@ feols(attendance_per ~ season + season_wins_scaled + adj_home_odds + game_time_a
         home + away + weekday,
       data = filter(dat.final, league == "NHL"),# %>% 
         # filter(season != "2019-20"),
-      vcov = ~home
+      cluster = ~home
 )
+
+lm(attendance_per ~ season + adj_home_odds, data = filter(dat.final, league == "NHL"))
 # Golden state warriors and Tampa bay lightning were at 100% capacity for EVERY SINGLE GAME in the 5 seasons
 # NBA teams with 0 variance in 2021-22 (Heat is very low variance)
 c("Boston Celtics", "Golden State Warriors", "Utah Jazz")
@@ -408,5 +410,10 @@ c("Detroit Pistons", "Washington Wizards", "Orlando Magic", "San Antonio Spurs",
 c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")
 # NHL teams with the highest variance
 c("Buffalo Sabres", "Arizona Coyotes", "New Jersey Devils", "San Jose Sharks", "Los Angeles Kings")
+
+
+
+
+
 
 
