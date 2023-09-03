@@ -59,7 +59,7 @@ team_name_help <- function(.team, .nba = T) {
       .team == "Toronto" ~ "Toronto Raptors", 
       .team == "Utah" ~ "Utah Jazz",
       .team == "Washington" ~ "Washington Wizards",
-      T ~ "Error"
+      T ~ paste("Error", .team)
     )
   }
   else {
@@ -77,26 +77,26 @@ team_name_help <- function(.team, .nba = T) {
       .team == "Detroit" ~ "Detroit Red Wings",
       .team == "Edmonton" ~ "Edmonton Oilers",
       .team == "Florida" ~ "Florida Panthers",
-      .team == "LosAngeles" ~ "Los Angeles Kings",
+      .team %in% c("LosAngeles", "Los Angeles") ~ "Los Angeles Kings",
       .team == "Minnesota" ~ "Minnesota Wild",
       .team == "Montreal" ~ "Montreal Canadiens",
       .team == "Nashville" ~ "Nashville Predators",
-      .team == "NewJersey" ~ "New Jersey Devils",
-      .team == "NYIslanders" ~ "New York Islanders",
-      .team == "NYRangers" ~ "New York Rangers", 
+      .team %in% c("NewJersey", "New Jersey") ~ "New Jersey Devils",
+      .team %in% c("NYIslanders", "NY Islanders") ~ "New York Islanders",
+      .team %in% c("NYRangers", "NY Rangers") ~ "New York Rangers", 
       .team == "Ottawa" ~ "Ottawa Senators",
       .team == "Philadelphia" ~ "Philadelphia Flyers",
       .team == "Pittsburgh" ~ "Pittsburgh Penguins",
-      .team == "SanJose" ~ "San Jose Sharks",
-      .team == "SeattleKraken" ~ "Seattle Kraken",
-      .team == "St.Louis" ~ "St. Louis Blues",
-      .team == "TampaBay" ~ "Tampa Bay Lightning",
+      .team %in% c("SanJose", "San Jose") ~ "San Jose Sharks",
+      .team %in% c("SeattleKraken", "Seattle Kraken", "Seattle") ~ "Seattle Kraken",
+      .team %in% c("St.Louis", "St. Louis") ~ "St. Louis Blues",
+      .team %in% c("TampaBay", "Tampa Bay") ~ "Tampa Bay Lightning",
       .team == "Toronto" ~ "Toronto Maple Leafs",
       .team == "Vancouver" ~ "Vancouver Canucks",
       .team == "Vegas" ~ "Vegas Golden Knights",
       .team == "Washington" ~ "Washington Capitals",
       .team == "Winnipeg" ~ "Winnipeg Jets", 
-      T ~ "Error"
+      T ~ paste("Error", .team)
     )
   }
 }
@@ -110,7 +110,7 @@ load_clean_bet <- function() {
     if (!identical(data$VH, rep(expected_pattern, length.out = nrow(data)))) {
       stop("Condition failed at row(s): ", paste0(which(data$VH != expected_pattern), collapse = ", "))
     }
-    
+    print("All good")
     return(data)
   }
   
@@ -122,14 +122,15 @@ load_clean_bet <- function() {
     mlName <- if (str_detect(obj, "nba")) "ML" else "Close"
     get(obj, envir = rawEnvir) %>% 
       filter(VH != "N") %>% # must be like games in London/Mexico, it was only like 3 though.
-      select(Date, VH, Team, mlName) %>% 
+      select(Date, VH, Team, all_of(mlName)) %>% 
       set_colnames(c("date", "VH", "home", "home_odds")) %>%
       mutate(home_odds = as.numeric(home_odds)) %>% 
       check_vh_variable() %>% 
       mutate(home = team_name_help(home, str_detect(obj, "nba"))) %>% 
       left_join(mutate(., away_odds = lag(home_odds)) %>% 
                   filter(VH == "H") %>% 
-                  select(date, home, away_odds), by = c("date", "home")) %>% 
+                  select(date, home, away_odds), by = c("date", "home")
+                ) %>% 
       filter(VH == "H") %>%
       select(-VH) %>% 
       mutate(across(home_odds:away_odds, ~case_when(
@@ -154,4 +155,21 @@ load_clean_bet <- function() {
   dat.bet
 }
 
+# test <- read_csv("assets/betting_data/raw.nba.2020.bet.csv", col_types = cols(.default = "c")) %>% 
+#   filter(VH != "N") %>% # must be like games in London/Mexico, it was only like 3 though.
+#   select(Date, VH, Team, ML) %>% 
+#   set_colnames(c("date", "VH", "home", "home_odds")) %>%
+#   mutate(home_odds = as.numeric(home_odds)) %>% 
+#   mutate(home = team_name_help(home, T)) %>% 
+#   left_join(mutate(., away_odds = lag(home_odds)) %>% 
+#               filter(VH == "H") %>% 
+#               select(date, home, away_odds), by = c("date", "home")
+#   ) %>% 
+#   filter(VH == "H") %>%
+#   select(-VH) %>% 
+#   mutate(across(home_odds:away_odds, ~case_when(
+#     .x > 0 ~ 100/(100 + .x),
+#     .x < 0 ~ -.x/(100 - .x),
+#   ))) 
+# 
 

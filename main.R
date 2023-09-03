@@ -1,36 +1,32 @@
 ############################################################################## #
-### Main File for sports econ paper
+### Sports Econ Project
 ############################################################################## #  
 
-# This project depends on the end-user having proj and sqlite3 downloading on their computer
-# packages
-library(car) # vif function, doesn't seem to work with feols objects though - 6/25/2023
-library(expp) # neighbors data frame function. this messes with view() function, and probably lots of others
-as.data.frame <- base::as.data.frame
-library(fastDummies)
+library(fastDummies) # used in policy graph
 library(fixest) # regression stuff
-library(htmltools) # for leaflet
+# library(htmltools) # for leaflet
 library(httr) # data-scraping
-library(leaflet)
+library(ivDiag)
+# library(leaflet)
 library(lubridate) # dates
 library(magrittr) # set_colnames function
 library(maps) # US map tiles
-library(openxlsx)
+# library(openxlsx) # note sure if I actually need this anymore - 7/14/2023
 library(patchwork) 
-library(performance) # not sure if I actually us this ... - 6/25/2023
-library(renv)
+# library(performance) # not sure if I actually use this ... - 6/25/2023
+# library(renv) # package manager
 library(RCurl) # needed for something ...
-library(rsconnect)
+# library(rsconnect)
 library(rvest) # read_html function
 library(scales)
-library(shiny)
-library(shinycssloaders)
-library(spdep) # spatial data, I think
-library(stargazer)
-library(tidycensus) # census data
+# library(shiny)
+# library(shinycssloaders)
+# library(spdep) # spatial data, I think
+# library(stargazer)
+# library(tidycensus) # census data
 library(tidyselect)
 library(tidyverse)
-library(tigris) # census shape data
+# library(tigris) # census shape data
 library(totalcensus) # cbsa data
 # import helper functions. Keeps them out of global namespace. Also sets some global options
 source("helper.R", local = helper <- new.env())
@@ -108,10 +104,10 @@ raw.nhl.2022 <- scrape_season(nhlSeasons[8] %>% reduce(c), "nhl", tries = 20) %>
   filter(!(home %notin% c("San Jose Sharks?", "Nashville Predators?") & date < "2022-10-11")) %>% 
   mutate(season = "2022-23")
 
-# write the data
+# write the data - it's probably just smarter to save the dataframes one at a time
 # mass_write("assets/game_data/nba/", game_data_names %includes% "nba")
 # mass_write("assets/game_data/nhl/", game_data_names %includes% "nhl")
-write_csv(test, "assets/game_data/nhl/raw.nhl.2022.csv")
+# write_csv(test, "assets/game_data/nhl/raw.nhl.2022.csv")
 
 # betting data 
 attach_source("bet.R", "betting_data")
@@ -132,19 +128,25 @@ get_estimates(geography = "county", variables = "POPESTIMATE", year = 2022) %>%
 # FIP/CBSA Data ----------------------------------------------------------------
 
 # get neighboring counties
-dat.neighboring <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>% # gets county geo-spatial data
-  select(GEOID, geometry) %>% 
-  set_colnames(c("fips", "geometry"))
-dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function that automatically detects adjacencies
-  pull(geometry) %>% 
-  poly2nb(row.names = dat.neighboring %>% pull(fips)) %>% 
-  neighborsDataFrame() %>% # expp library
-  group_by(id) %>% 
-  summarize(id_neigh = list(unique(id_neigh))) %>% 
-  ungroup() %>% 
-  set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 7/8/2023
+# dat.neighboring <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>% # gets county geo-spatial data
+#   select(GEOID, geometry) %>% 
+#   set_colnames(c("fips", "geometry"))
+# dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function that automatically detects adjacencies
+#   pull(geometry) %>% 
+#   poly2nb(row.names = dat.neighboring %>% pull(fips)) %>% 
+#   neighborsDataFrame() %>% # expp library
+#   group_by(id) %>% 
+#   summarize(id_neigh = list(unique(id_neigh))) %>% 
+#   ungroup() %>% 
+#   set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 8/7/2023
+
+# because I can't fix expp
+# saveRDS(dat.neighboring, "assets/dat.neighboring.rds")
+dat.neighboring <- readRDS("assets/dat.neighboring.rds")
 
 # clean population data for merge
+# I manually had to put in Fairfield and Litchfield county into the data, b/c of bullshit. Sourced from worldpopulationreview.com
+# In fact that didn't even have 2021 estimates, so I just summed the 2020 and 2022 estimates and divided by 2.
 dat.population <- read_csv("assets/cbsa_data/dat.population.2021.csv", col_types = "ccccd") %>% 
   select(GEOID, year, value) %>% 
   set_colnames(c("fips", "year", "pop")) %>% 
@@ -170,7 +172,7 @@ dat.population <- read_csv("assets/cbsa_data/dat.population.2021.csv", col_types
       select(-temp)
   ) %>% 
   pivot_wider(names_from = year, values_from = pop) %>% 
-  set_colnames(c("fips", "pop_2021", "pop_2022")) # 3144 obs, 3 vars - 7/10/2023
+  set_colnames(c("fips", "pop_2021", "pop_2022")) # 3146 obs, 3 vars - 8/7/2023
 
 # clean CBSA data
 dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default = "c")) %>% 
@@ -221,7 +223,7 @@ dat.cbsa <- read_csv("assets/cbsa_data/raw.cbsa.csv", col_types = cols(.default 
   ungroup(temp) %>% 
   select(-temp) %>% 
   ungroup()
-# 729 obs, 14 vars - 7/10/2023
+# 729 obs, 14 vars - 8/7/2023
 # 313 unique CBSA-only fips, 416 neighbor-only fips, 403 unique neighbor-only fips. ...
 # ... 23 duplicates. 13 neighbor-neighbor duplicates, 10 neighbor-cbsa duplicates. ...
 # ... together, there are 313 + 403 - 10 = 706 unique fips. This includes all 5 boroughs, so really 702. The pop for the 5 boroughs is summed.
@@ -281,11 +283,16 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n)", perl = T), ~case_when(
-        date < "2022-01-01" ~ .x*100000/cbsa_pop_2021,
-        T ~ .x*100000/cbsa_pop_2022,
+      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_cases)", perl = T), ~case_when(
+        date < "2022-01-01" ~ .x*100/cbsa_pop_2021,
+        T ~ .x*100/cbsa_pop_2022,
         )
         )) %>% 
+      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_deaths)", perl = T), ~case_when(
+        date < "2022-01-01" ~ .x*100000/cbsa_pop_2021,
+        T ~ .x*100000/cbsa_pop_2022,
+      )
+      )) %>% 
       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
@@ -297,151 +304,175 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n)", perl = T), ~case_when(
+      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_cases)", perl = T), ~case_when(
+        date < "2022-01-01" ~ .x*100/cbsa_pop_2021,
+        T ~ .x*100/cbsa_pop_2022,
+      )
+      )) %>% 
+      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_deaths)", perl = T), ~case_when(
         date < "2022-01-01" ~ .x*100000/cbsa_pop_2021,
         T ~ .x*100000/cbsa_pop_2022,
       )
       )) %>% 
       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-    by = c("date", "cbsa")) # 187775 obs, 41 vars  - 7/10/2023. you get errors from my_impute function
+    by = c("date", "cbsa")) # 187775 obs, 41 vars  - 8/7/2023. you get errors from my_impute function
 
 # THIS IS CURRENTLY NOT BEING USED. WE AREN'T USING COVID-19 DATA IN THE MULTI-SEASON REGRESSION
 # This also isn't updated to the newest code, specicially, population data will be messed up, and I forgot to divide neigh by population.
-dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>% 
-  as_tibble() %>% 
-  relocate(fips, state, .before = county) %>% 
-  # The 5 boroughs are listed as "New York City" in county var, and NA in fips. ...
-  # ... I made it so NYC all under Bronx fip. 309 unique cbsa fips now. So 313 + 403 - 4 - 10 = 702 unique fips
-  mutate(fips = case_when(county == "New York City" ~ "36005", T ~ fips)) %>% 
-  filter(fips %in% (dat.cbsa %>% pull(fips))) %>% 
-  # Jan 6th 2020 is the first monday of the year, and april 5th is a sunday
-  filter("2020-01-05" <= date & date <= "2020-04-05") %>% # keep a day before 2020-01-05 for lag calculation
-  left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", relationship = "many-to-many") %>% 
-  relocate(cbsa:home, .after = date) %>% 
-  relocate(central_outlying:cbsa_pop, .after = county) %>% 
-  mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
-  group_by(fips, cbsa) %>% # need central_outlying to adequately identify counties, since we have duplicates.
-  mutate(across(cases:deaths, ~case_when( # create new cases and deaths
-    row_number() == 1 ~ NA_real_, 
-    T ~ .x - lag(.x)
-  ), 
-  .names = "n_{col}"
-  )) %>%  
-  ungroup() %>% 
-  filter(date > "2020-01-05") %>% # we just needed this to calculate new cases for 2020-01-06
-  # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
-  # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
-  mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
-    .x <= 0 ~ NA,
-    T ~ .x
-  ),
-  .names = "i_{col}"
-  )) %>% 
-  group_by(cbsa, fips) %>% 
-  mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
-  mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
-  # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
-  # ... at the end of the data set, so we are fine setting them to 0.
-  # gets the rolling weekly cases figure, and the lag of that.
-  mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
-                .names = "w_{col}")) %>% 
-  mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
-                .names = "l_{col}")) %>% 
-  ungroup() %>% # aggregate to cbsa levels
-  left_join( 
-    filter(., central_outlying != "Neighboring") %>% 
-      distinct(date, cbsa, fips, .keep_all = T) %>%
-      group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-      ungroup() %>% 
-      distinct(date, cbsa, .keep_all = T) %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
-      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
-    by = c("date", "cbsa")) %>% 
-  left_join( # aggregate to cbsa levels
-    filter(., central_outlying == "Neighboring") %>% 
-      distinct(date, cbsa, fips, .keep_all = T) %>%
-      group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
-      ungroup() %>% 
-      distinct(date, cbsa, .keep_all = T) %>% 
-      group_by(cbsa) %>% # add one week lag
-      mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-      mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
-      select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-    by = c("date", "cbsa")) # 13019 obs, 40 vars  - 6/25/2023. you get errors from my_impute function
+# dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>% 
+#   as_tibble() %>% 
+#   relocate(fips, state, .before = county) %>% 
+#   # The 5 boroughs are listed as "New York City" in county var, and NA in fips. ...
+#   # ... I made it so NYC all under Bronx fip. 309 unique cbsa fips now. So 313 + 403 - 4 - 10 = 702 unique fips
+#   mutate(fips = case_when(county == "New York City" ~ "36005", T ~ fips)) %>% 
+#   filter(fips %in% (dat.cbsa %>% pull(fips))) %>% 
+#   # Jan 6th 2020 is the first monday of the year, and april 5th is a sunday
+#   filter("2020-01-05" <= date & date <= "2020-04-05") %>% # keep a day before 2020-01-05 for lag calculation
+#   left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", relationship = "many-to-many") %>% 
+#   relocate(cbsa:home, .after = date) %>% 
+#   relocate(central_outlying:cbsa_pop, .after = county) %>% 
+#   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
+#   group_by(fips, cbsa) %>% # need central_outlying to adequately identify counties, since we have duplicates.
+#   mutate(across(cases:deaths, ~case_when( # create new cases and deaths
+#     row_number() == 1 ~ NA_real_, 
+#     T ~ .x - lag(.x)
+#   ), 
+#   .names = "n_{col}"
+#   )) %>%  
+#   ungroup() %>% 
+#   filter(date > "2020-01-05") %>% # we just needed this to calculate new cases for 2020-01-06
+#   # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
+#   # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
+#   mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
+#     .x <= 0 ~ NA,
+#     T ~ .x
+#   ),
+#   .names = "i_{col}"
+#   )) %>% 
+#   group_by(cbsa, fips) %>% 
+#   mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
+#   mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+#   # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
+#   # ... at the end of the data set, so we are fine setting them to 0.
+#   # gets the rolling weekly cases figure, and the lag of that.
+#   mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
+#                 .names = "w_{col}")) %>% 
+#   mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
+#                 .names = "l_{col}")) %>% 
+#   ungroup() %>% # aggregate to cbsa levels
+#   left_join( 
+#     filter(., central_outlying != "Neighboring") %>% 
+#       distinct(date, cbsa, fips, .keep_all = T) %>%
+#       group_by(date, cbsa) %>% 
+#       mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
+#       ungroup() %>% 
+#       distinct(date, cbsa, .keep_all = T) %>% 
+#       group_by(cbsa) %>% # add one week lag
+#       mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+#       mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
+#       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
+#     by = c("date", "cbsa")) %>% 
+#   left_join( # aggregate to cbsa levels
+#     filter(., central_outlying == "Neighboring") %>% 
+#       distinct(date, cbsa, fips, .keep_all = T) %>%
+#       group_by(date, cbsa) %>% 
+#       mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
+#       ungroup() %>% 
+#       distinct(date, cbsa, .keep_all = T) %>% 
+#       group_by(cbsa) %>% # add one week lag
+#       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+#       mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
+#       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
+#     by = c("date", "cbsa")) # 13019 obs, 40 vars  - 6/25/2023. you get errors from my_impute function
 
 # Betting Data -----------------------------------------------------------------
 
 # load already cleaned betting data
 attach_source("bet.R", "betting_data")
-dat.bet <- load_clean_bet() # 15373, 7 vars - 7/10/2023
+dat.bet <- load_clean_bet() # 6 vars, 18499 obs - 8/7/2023
 
 # Game Data Cleaning -----------------------------------------------------------
 
 # clean NBA data 
-dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 9445 observations
+dat.nba <- mass_load("assets/game_data/nba/", 1, .bind = T) %>% # 9445 observations - 7/14/2023
   as_tibble() %>% 
   mutate(across(everything(), ~str_replace(.x, "\\?", ""))) %>% 
   filter(home_record != "") %>% # -11 -> remove allstar, USA games
   filter(home_score != "NA") %>% # -3 -> removes postponed game (1) and 2 cancelled 3/11/2020 covid games
-  # filter(home != "Toronto Raptors") %>% # -237, 41*5 + 32 games from 2019-20 season
-  # filter(stadium %notin% c("Arena Ciudad de Mexico", "Mexico City Arena", "O2 Arena (ENG)", 
-  # "UW-Milwaukee Panther Arena", "Accor Arena", "Moody Center", "Alamodome")) %>% # -20 -> all special occasion/different venue games
   mutate(across(home:away, ~case_when( 
     .x == "LA Clippers" ~ "Los Angeles Clippers",
     T ~ .x
   ))) %>% 
-  # filling in missing attendance figures below. Missing from the actual ESPN site
+  # filling in missing attendance figures below. Missing from the actual ESPN site. Listed as NA in the data
+  # Any game listed as NA in the 2020-21 season, I'm marking as 0, without checking. Any other instance of NA I'm looking into.
+  # Same with any raptors game in the 2021-22 season, automatically 0 if NA.
+  # The cavs played a game on 2022-10-26 and I can see fans in the stadium but both ESPN and NBA.com lists 0 attendance.
+  # Same with a 2023-03-22 jazz game - both say 0 attendance. Didn't check video.
   mutate(attendance = case_when(
     date == "2021-11-03" & home == "Sacramento Kings" ~ "Attendance: 12,480", # https://www.nba.com/game/nop-vs-sac-0022100118?watch
     date == "2021-10-26" & home == "Oklahoma City Thunder" ~ "Attendance: 15,717", # https://www.nba.com/game/gsw-vs-okc-0022100051    
     date == "2019-04-09" & home == "Utah Jazz" ~ "Attendance: 18,306", # https://www.nba.com/game/den-vs-uta-0021801217?watch
     date == "2021-10-27" & home == "Boston Celtics" ~ "Attendance: 19,156", # https://www.nba.com/game/was-vs-bos-0022100056?watch
     date == "2017-11-08" & home == "Orlando Magic" ~ "Attendance: 18,803", # https://www.nba.com/game/nyk-vs-orl-0021700160
+    date == "2022-10-25" & home == "Phoenix Suns" ~ "Attendance: 17,071", # https://www.nba.com/game/gsw-vs-phx-0022200055
+    date == "2022-11-14" & home == "Boston Celtics" ~ "Attendance: 19,156", # https://www.nba.com/game/0022200201
     T ~ attendance
   )) %>% 
   mutate(attendance = case_when(
     attendance == "NA" ~ "Attendance: 0",
     T ~ attendance
   )) %>% 
-  mutate(league = "NBA", .after = date) # 9411 obs, 12 vars - 7/10/2023. I did not remove raptors
+  mutate(league = "NBA", .after = date) # 9431 obs, 13 vars - 8/7/2023.
 
 # clean NHL data 
-dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 9747 observations. Missing 7 from 2015-16, added later.
+dat.nhl <- mass_load("assets/game_data/nhl/", 1, .bind = T) %>% # 9754 observations - 7/14/2023
   as_tibble() %>% 
   mutate(across(everything(), ~str_replace(.x, "\\?", ""))) %>% 
   filter(home_record != "") %>% # -21 -> remove allstar games
   filter(home_score != "NA") %>% # -101 + (- 56) -> removes postponed game, none in 2019-20 season. Lots (56) in 2020-21
-  # filter(home %notin% c("Calgary Flames", "Edmonton Oilers", "Montreal Canadiens", 
-  #                       "Ottawa Senators", "Toronto Maple Leafs", "Vancouver Canucks", 
-  #                       "Winnipeg Jets", "Seattle Kraken")) %>% # -1723, 41*7*5 + 41 (Kraken) + 247 (from 2019 season)
-  # filter(stadium %notin% c("Avicii Arena", "Citi Field", "Carter-Finley Stadium", "Edgewood Tahoe Resort", "Ericsson Globe",
-  #                          "Fenway Park", "Hartwall Areena", "Lincoln Financial Field", "Navy-Marine Corps Memorial Stadium",
-  #                          "Nissan Stadium", "Nokia Arena", "Notre Dame Stadium", "Scandinavium",
-  #                          "Target Field", "Tim Hortons Field",  
-  #                          "NA", "O2 Arena", "O2 Arena (Prague)", "Lansdowne Park")) %>% # -28. NA just seems to be winter classics. Difficult to tell how many each season, as some were played by Canadian teams and already filtered out above
+  # Seems like some 2022-23 games accidentally were marked NA, those 7 games fixed below. Otherwise, 2021-22 or 2020-21, marked 0. Those seem to be correctly NA.
+  mutate(attendance = case_when(
+    date == "2023-03-25" & home == "New York Islanders" ~ "Attendance: 17,255", # https://www.hockey-reference.com/boxscores/202303250NYI.html
+    date == "2023-02-12" & home == "Washington Capitals" ~ "Attendance: 18,573", # https://www.hockey-reference.com/boxscores/202302120WSH.html
+    date == "2022-12-31" & home == "Vegas Golden Knights" ~ "Attendance: 18,333", # https://www.hockey-reference.com/boxscores/202212310VEG.html
+    date == "2023-04-02" & home == "Calgary Flames" ~ "Attendance: 17,439", # https://www.hockey-reference.com/boxscores/202304020CGY.html
+    date == "2023-01-18" & home == "Calgary Flames" ~ "Attendance: 17,768", # https://www.hockey-reference.com/boxscores/202301180CGY.html
+    date == "2022-11-29" & home == "Winnipeg Jets" ~ "Attendance: 13,510", # https://www.hockey-reference.com/boxscores/202211290WPG.html
+    date == "2022-11-21" & home == "Winnipeg Jets" ~ "Attendance: 13,346", # https://www.hockey-reference.com/boxscores/202211210WPG.html
+    date == "" & home == "" ~ "Attendance: ", # 	
+    T ~ attendance
+  )) %>% 
   mutate(attendance = case_when(
     attendance == "NA" ~ "Attendance: 0",
     T ~ attendance
   )) %>% 
-  mutate(league = "NHL", .after = date) # 5645 obs, 12 vars - 6/25/2023
+  mutate(league = "NHL", .after = date) # 9576 obs, 13 vars - 8/7/2023
 
 # Final Merge ------------------------------------------------------------------
-  
+
 # merge everything together, prep for regression
-dat.final <- dat.nba %>% 
+dat.final <- dat.nba %>% # 19007 obs, 13 vars - 7/13/2023.
   bind_rows(dat.nhl) %>% 
   mutate(date = as.Date(date)) %>% 
   mutate(across(home_score:away_score, ~as.numeric(.x))) %>% 
   mutate(across(attendance:capacity, ~str_extract(.x, "(?<=: )[\\s\\S]*") %>% 
                   str_replace(",", "") %>% 
                   as.numeric())) %>% 
+  mutate(capacity = case_when( # for some reason, ESPN didn't have capacity data on Amalie arena in 2020-21 NBA season.
+    stadium == "Amalie Arena" ~ 19092,
+    T ~ capacity
+  )) %>% 
   mutate(attendance_per = attendance*100/capacity) %>% 
+  group_by(season, home) %>% 
+  mutate(game_number = row_number(), .after = away_score) %>% 
+  ungroup() %>% 
   relocate(attendance_per, .after = capacity) %>% # up to here all just string cleaning
   mutate(across(c(home_record, away_record, game_time), ~str_extract(.x, "^[^,]*"))) %>% 
+  semi_join(group_by(., league, season, home) %>% # this beautiful code courtesy of chatGPT removes all observations ...
+              count(stadium, sort = T) %>% # ... that contained a weird stadium, per league, per season, per home team
+              filter(n >= 10) %>% # it keeps the stadium if it was played in more than 10 times that season
+              ungroup(), # it removes 64 observations, which is expected
+            by = c("league", "season", "home", "stadium")) %>% 
   left_join(dat.bet %>% select(-home_odds, -away_odds), by = c("date", "home")) %>% 
   relocate(adj_home_odds:adj_away_odds, .after = away_score) %>% 
   left_join(dat.cbsa %>% # get cbsa-level vars, 4 vars
@@ -476,114 +507,45 @@ dat.final <- dat.nba %>%
   mutate(game_time_approx = factor(game_time_approx, levels = c("Evening Game", "Early Game", "Night Game"))) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
   mutate(weekday = weekdays(date), .after = date) %>% 
-  mutate(policy = case_when(is.na(policy) ~ "none", T ~ policy)) %>% 
+  # mutate(policy = case_when(is.na(policy) ~ "none", T ~ policy)) %>% 
   mutate(month = month(date, label = T, abbr = F) %>% as.character(), .before = weekday) %>% 
   mutate(season_wins = str_sub(home_record, 1L, 2L), .before = home_record) %>% 
+  mutate(season_draws = case_when(
+    league == "NHL" ~ str_extract(home_record, "(?<=-).*?(?=-)"), # match characters between dashes
+    T ~ "0"
+    ), .after = season_wins) %>% 
   group_by(season, home) %>% 
-  mutate(season_wins = as.numeric(last(season_wins))) %>% 
-  ungroup() %>% # need to use distinct because not an equal number of entries per team per season (cause of mexico games and such)
-  left_join(distinct(., season, league, home, .keep_all = T) %>% 
-              group_by(season, league) %>% 
-              mutate(season_wins_scaled = as.numeric(scale(season_wins))) %>% 
-              ungroup() %>% 
-              select(season, home, season_wins_scaled),
-            by = c("season", "home")) %>% 
-  relocate(season_wins_scaled, .after = season_wins) %>% 
-  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) %>% # 10748 obs, 44 vars - 4/27/2023
-  mutate(across(contains("_w_"), ~case_when(
-    is.na(.x) ~ 0,
-    T ~ .x
-  ))) # 12514 obs, 44 vars - 6/27/2023
+  mutate(across(season_wins:season_draws, ~as.numeric(last(.x)))) %>% 
+  ungroup() %>% 
+  mutate(win_percent = season_wins + season_draws/2, .after = season_draws) %>% 
+  mutate(win_percent = case_when(
+    season %notin% c("2019-20", "2020-21") ~ win_percent/82,
+    league == "NBA" & season == "2020-21" ~ win_percent/72,
+    league == "NHL" & season == "2020-21" ~ win_percent/56,
+    T ~ win_percent
+  )) %>% 
+  left_join(
+    distinct(., home, season, .keep_all = T) %>%
+      group_by(home) %>% 
+      mutate(lag_win_percent = lag(win_percent), .after = win_percent) %>% 
+      ungroup() %>% 
+      select(home, season, lag_win_percent),
+      by = c("home", "season")
+      ) %>% 
+  relocate(lag_win_percent, .after = win_percent) %>% 
+  mutate(lag_win_percent = case_when( # number of games in 2019-20 was 72 and 56 for NBA and NHL. Remember, NHL is in points ...
+    season == "2015-16" & league == "NBA" ~ winrate_helper(home, season)/82, # ... so multiply denominator by 2
+    season == "2015-16" & league == "NHL" ~ winrate_helper(home, season)/164,
+    season == "2020-21" & league == "NBA" ~ winrate_helper(home, season)/72,
+    season == "2020-21" & league == "NHL" ~ winrate_helper(home, season)/112,
+    T ~ lag_win_percent
+  )) %>% 
+  mutate(lag_win_percent = case_when( # VGK and SK first seasons, set them to 0.5 win percent
+    is.na(lag_win_percent) ~ 0.5,
+    T ~ lag_win_percent
+  )) %>% 
+  mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 18943 obs, 47 vars - 8/7/2023
   
-# Leaflet Data -----------------------------------------------------------------
-
-# 200 by 710 observations
-dat.leaflet <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>%
-  select(GEOID, geometry) %>% 
-  mutate(geometry = st_transform(geometry, '+proj=longlat +datum=WGS84')) %>% # prevents leaflet warnings
-  rename(fips = GEOID) %>% 
-  bind_rows(filter(., fips %in% c("36005", "36047", "36061", "36081", "36085")) %>% summarize(fips = "36005", geometry = st_union(geometry))) %>% 
-  filter(row_number() != 471) %>% 
-  right_join(dat.covid %>% 
-               select(date, floor_monday, cbsa, cbsa_title, county, fips, central_outlying, w_n_cases, w_n_deaths, cbsa_w_n_cases, cbsa_w_n_deaths, neigh_cbsa_w_n_cases, neigh_cbsa_w_n_deaths), 
-             by = "fips") %>% 
-  filter("2021-10-12" <= date & date <= "2022-04-29") %>% # just the 2021-22 season
-  left_join(dat.final %>% select(date, cbsa, season, home:game_time_approx), by = c("date", "cbsa")) %>% 
-  relocate(season, home:game_time_approx, geometry, .after = central_outlying) %>% 
-  group_by(fips) %>% 
-  mutate(temp = (any(central_outlying != "Neighboring") & any(central_outlying == "Neighboring")), .after = fips) %>% 
-  ungroup() %>% 
-  filter(!(temp == T & central_outlying == "Neighboring")) %>% # removes cbsa-neighbor duplicates, keeps CBSA ones
-  group_by(fips) %>% 
-  mutate(temp = (first(cbsa) == cbsa), .after = fips) %>% 
-  ungroup() %>% 
-  filter(temp == T) %>% # removes neighbor-neighbor overlap.
-  select(-temp) %>% 
-  left_join(filter(., date == "2021-11-16") %>% # could be any day
-              mutate(neighboring = case_when(central_outlying == "Neighboring" ~ T, T ~ F)) %>% 
-              group_by(cbsa, neighboring) %>% 
-              mutate(cbsa_geometry = st_union(geometry)) %>% 
-              ungroup() %>% 
-              distinct(fips, cbsa, .keep_all = T) %>% 
-              select(fips, cbsa, cbsa_geometry) %>% 
-              st_drop_geometry(geometry),
-            by = c("fips", "cbsa")
-  ) %>% 
-  relocate(cbsa_geometry, .after = cbsa_title) %>% 
-  mutate(across(c(home_score:away_score, attendance), ~as.integer(.x))) %>% 
-  mutate(policy = case_when(
-    policy == "vaccine" ~ "Vaccine Mandate",
-    policy == "mask" ~ "Mask Mandate",
-    policy == "both" ~ "Mask & Vaccine Mandate",
-    T ~ "No Policy"
-  )) %>% 
-  left_join(st_drop_geometry(., geometry, cbsa_geometry) %>% # group all game data into a single data-frame column
-              select(floor_monday, fips, date, home:away_score, stadium, policy, attendance) %>% 
-              filter(!is.na(home)) %>% 
-              mutate(date = as.character(date)) %>% 
-              set_colnames(c("floor_monday", "fips", "Date", "Home Team", "Away Team", "Home Record", "Away Record", "Home Score", "Away Score", "Stadium", "Covid-19 Policy", "Attendance")) %>% 
-              nest(game_data_nest = Date:Attendance),
-            by = c("floor_monday", "fips")
-  ) %>% 
-  select(-(home:game_time)) %>% # all in data frame column
-  group_by(fips, floor_monday) %>% 
-  mutate(temp = row_number()) %>% # remove duplicates caused by multiples games in same cbsa on same day, just keep first.
-  ungroup() %>% 
-  filter(temp == 1) %>% 
-  select(-temp) %>% # 710 unique fips times 29 weeks
-  mutate(fip_label = paste0(
-    "<dt style=font-weight:bold;font-size:12pt;>City Stats</dt>
-        <li style=margin-left:15px;>CBSA Title: ", cbsa_title, "</li>
-        <li style=margin-left:15px;>Weekly New Cases: ", cbsa_w_n_cases, "</li>
-        <li style=margin-left:15px;>Weekly New Deaths: ", cbsa_w_n_deaths, "</li>
-    <dt style=font-weight:bold;font-size:12pt;>Neighboring Counties Stats</dt>
-        <li style=margin-left:15px;>Weekly New Cases: ", neigh_cbsa_w_n_cases, "</li>
-        <li style=margin-left:15px;>Weekly New Deaths: ", neigh_cbsa_w_n_deaths, "</li>
-    <dt style=font-weight:bold;font-size:12pt;>County Stats</dt>
-        <li style=margin-left:15px;>County Title: ", county, "</li>
-        <li style=margin-left:15px;>Weekly New Cases: ", w_n_cases, "</li>
-        <li style=margin-left:15px;>Weekly New Deaths: ", w_n_deaths, "</li>"
-  )) %>% 
-  select(-game_time_num, -season, -game_time_approx) 
-
-# fips data
-dat.leaflet.fips <- dat.leaflet %>%
-  select(floor_monday, cbsa, cbsa_title, game_data_nest, fips, county, fip_label, central_outlying, geometry, w_n_cases:neigh_cbsa_w_n_deaths) %>% 
-  saveRDS("dat.leaflet.fips.rds")
-
-# cbsa data
-dat.leaflet.cbsa <- dat.leaflet %>% 
-  st_drop_geometry() %>% 
-  select(cbsa, cbsa_geometry) %>% 
-  distinct(cbsa_geometry) %>% 
-  saveRDS("dat.leaflet.cbsa.rds")
-
-
-
-
-
-
-
 
 
 
