@@ -2,146 +2,128 @@
 ### Sports Econ Project
 ############################################################################## #  
 
-library(fastDummies) # used in policy graph
-library(fixest) # regression stuff
-# library(htmltools) # for leaflet
-library(httr) # data-scraping
-library(ivDiag)
-# library(leaflet)
-library(lubridate) # dates
-library(magrittr) # set_colnames function
-library(maps) # US map tiles
-# library(openxlsx) # note sure if I actually need this anymore - 7/14/2023
+### Data Scraping ###
+# library(#httr)
+# library(#RCurl)
+# library(#rvest)
+
+### Leaflet/Shiny ###
+# library(#htmltools)
+# library(#leaflet)
+# library(#rsconnect)
+# library(#shiny)
+# library(#shinycssloaders)
+
+### General Packages ###
+library(fastDummies) 
+library(fixest) 
+library(ivDiag) 
+library(lubridate) 
+library(magrittr) 
+library(maps) 
 library(patchwork) 
-# library(performance) # not sure if I actually use this ... - 6/25/2023
-# library(renv) # package manager
-library(RCurl) # needed for something ...
-# library(rsconnect)
-library(rvest) # read_html function
 library(scales)
-# library(shiny)
-# library(shinycssloaders)
-# library(spdep) # spatial data, I think
-# library(stargazer)
-# library(tidycensus) # census data
+library(tidycensus) # pop data
 library(tidyselect)
 library(tidyverse)
-# library(tigris) # census shape data
 library(totalcensus) # cbsa data
-# import helper functions. Keeps them out of global namespace. Also sets some global options
 source("helper.R", local = helper <- new.env())
 helper$my_attach(helper) 
 
 # Raw Data Collection ----------------------------------------------------------
 
-# cbsa data (from totalcensus package)
-data("dict_cbsa")
+### CBSA Data ### 
+# data("dict_cbsa")
 # write_csv(dict_cbsa, "assets/cbsa_data/raw.cbsa.csv")
 
-# covid-19 data (NewYorkTimes)
-nytRaw2020 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2020.csv")
-nytRaw2021 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2021.csv")
-nytRaw2022 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2022.csv")
+### COVID-19 Data ### 
+# nytRaw2020 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2020.csv")
+# nytRaw2021 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2021.csv")
+# nytRaw2022 <- getURL("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties-2022.csv")
 # write_csv(read_csv(nytRaw2020), "assets/covid_data/raw.covid2020.csv")
 # write_csv(read_csv(nytRaw2021), "assets/covid_data/raw.covid2021.csv")
 # write_csv(read_csv(nytRaw2022), "assets/covid_data/raw.covid2022.csv")
 
-# import data scraping objects
-attach_source("scrape.R", "data_scraping")
-
-# 2015-16 season. 1231 observations -> 1230 games, 1 allstar game
-raw.nba.2015 <- scrape_season(nbaSeasons[1] %>% reduce(c), "nba") %>% 
-    mutate(season = "2015-16")
-# 2016-17 season. 1232 observations -> 1230 games, 1 allstar game, 1/7/2017 blazers postponed
-raw.nba.2016 <- scrape_season(nbaSeasons[2] %>% reduce(c), "nba") %>% 
-  mutate(season = "2016-17")
-# 2017-18 season. 1232 observations -> 1230 games, 1 allstar game, USA game
-raw.nba.2017 <- scrape_season(nbaSeasons[3] %>% reduce(c), "nba") %>% 
-  mutate(season = "2017-18")
-# 2018-19 season. 1232 observations -> 1230 games, 1 allstar game, USA game
-raw.nba.2018 <- scrape_season(nbaSeasons[4] %>% reduce(c), "nba") %>% 
-  mutate(season = "2018-19")
-# 2019-2020 season, up to covid. 975 observations -> 971 games, 1 allstar game, USA game, Thunder game and Kings game cancelled on 3/11/2020
-raw.nba.2019 <- scrape_season(nbaSeasons[5] %>% reduce(c), "nba") %>% 
-  mutate(season = "2019-20")
-# 2020-21 season. 1081 observations -> 1080 games, 1 allstar game. 72 instead of 82 games.
-raw.nba.2020 <- scrape_season(nbaSeasons[6] %>% reduce(c), "nba", tries = 20) %>% 
-  mutate(season = "2020-21")
-# 2021-22 season. 1231 observations -> 1230 games, 1 allstar game
-raw.nba.2021 <- scrape_season(nbaSeasons[7] %>% reduce(c), "nba") %>% 
-  mutate(season = "2021-22")
-# 2022-23 season. 1231 observations -> 1230 games, 1 allstar game
-raw.nba.2022 <- scrape_season(nbaSeasons[8] %>% reduce(c), "nba", tries = 20) %>% 
-
-# 2015-16 season. 1235 observations -> 1230 games, 3 allstar games, 1/23/2016 islanders  ...
-# ... postponed, 1/24/2016 capitals postponed.
-raw.nhl.2015 <- scrape_season(nhlSeasons[1] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2015-16")
-# 2016-17 season. 1234 observations -> 1230 games, 3 allstar games, 3/14/2017 devils postponed
-raw.nhl.2016 <- scrape_season(nhlSeasons[2] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2016-17")
-# 2017-18 season. 1274 observations -> 1271 games, 3 allstar games. VGK joined this season
-raw.nhl.2017 <- scrape_season(nhlSeasons[3] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2017-18")
-# 2018-19 season. 1274 observations -> 1271 games, 3 allstar games
-raw.nhl.2018 <- scrape_season(nhlSeasons[4] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2018-19")
-# 2019-2020 season, up to covid. 1085 observations -> 1082 games, 3 allstar games
-raw.nhl.2019 <- scrape_season(nhlSeasons[5] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2019-20")
-# 2020-21 season. 56 instead of 82 games. 938 observations -> 868 games, the playoffs began on "2021-05-15", 
-# but there were still a couple of regular season games going on. Code below removes the 14 playoff games. Additionally, there were 56 postponed games
-raw.nhl.2020 <- scrape_season(nhlSeasons[6] %>% reduce(c), "nhl", tries = 20) %>%
-  filter(!(home %notin% c("Calgary Flames?", "Edmonton Oilers?", "Vancouver Canucks?") & date > "2021-05-14")) %>% 
-  filter(!(home == "Edmonton Oilers?" & date == "2021-05-19")) %>% 
-  mutate(season = "2020-21")
-# 2021-22 season. 1413 observations -> 1312 games, 3 allstar games, 98 postponed. Kraken joined
-raw.nhl.2021 <- scrape_season(nhlSeasons[7] %>% reduce(c), "nhl") %>% 
-  mutate(season = "2021-22")
-# 2022-23 season. 1330 observations -> 1312 games, 3 allstar games, regular season started abroad 
-# on 2022-10-07, and picked up again on 2022-10-11. There were 15 games inbetween that that were practice
-raw.nhl.2022 <- scrape_season(nhlSeasons[8] %>% reduce(c), "nhl", tries = 20) %>% 
-  filter(!(home %notin% c("San Jose Sharks?", "Nashville Predators?") & date < "2022-10-11")) %>% 
-  mutate(season = "2022-23")
-
-# write the data - it's probably just smarter to save the dataframes one at a time
+### Data Scraping ###
+# attach_source("scrape.R", "data_scraping")
+# 
+# # 2015-16 season. 1231 observations -> 1230 games, 1 allstar game
+# raw.nba.2015 <- scrape_season(nbaSeasons[1] %>% reduce(c), "nba") %>% 
+#     mutate(season = "2015-16")
+# # 2016-17 season. 1232 observations -> 1230 games, 1 allstar game, 1/7/2017 blazers postponed
+# raw.nba.2016 <- scrape_season(nbaSeasons[2] %>% reduce(c), "nba") %>% 
+#   mutate(season = "2016-17")
+# # 2017-18 season. 1232 observations -> 1230 games, 1 allstar game, USA game
+# raw.nba.2017 <- scrape_season(nbaSeasons[3] %>% reduce(c), "nba") %>% 
+#   mutate(season = "2017-18")
+# # 2018-19 season. 1232 observations -> 1230 games, 1 allstar game, USA game
+# raw.nba.2018 <- scrape_season(nbaSeasons[4] %>% reduce(c), "nba") %>% 
+#   mutate(season = "2018-19")
+# # 2019-2020 season, up to covid. 975 observations -> 971 games, 1 allstar game, USA game, Thunder game and Kings game cancelled on 3/11/2020
+# raw.nba.2019 <- scrape_season(nbaSeasons[5] %>% reduce(c), "nba") %>% 
+#   mutate(season = "2019-20")
+# # 2020-21 season. 1081 observations -> 1080 games, 1 allstar game. 72 instead of 82 games.
+# raw.nba.2020 <- scrape_season(nbaSeasons[6] %>% reduce(c), "nba", tries = 20) %>% 
+#   mutate(season = "2020-21")
+# # 2021-22 season. 1231 observations -> 1230 games, 1 allstar game
+# raw.nba.2021 <- scrape_season(nbaSeasons[7] %>% reduce(c), "nba") %>% 
+#   mutate(season = "2021-22")
+# # 2022-23 season. 1231 observations -> 1230 games, 1 allstar game
+# raw.nba.2022 <- scrape_season(nbaSeasons[8] %>% reduce(c), "nba", tries = 20) %>% 
+# 
+# # 2015-16 season. 1235 observations -> 1230 games, 3 allstar games, 1/23/2016 islanders  ...
+# # ... postponed, 1/24/2016 capitals postponed.
+# raw.nhl.2015 <- scrape_season(nhlSeasons[1] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2015-16")
+# # 2016-17 season. 1234 observations -> 1230 games, 3 allstar games, 3/14/2017 devils postponed
+# raw.nhl.2016 <- scrape_season(nhlSeasons[2] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2016-17")
+# # 2017-18 season. 1274 observations -> 1271 games, 3 allstar games. VGK joined this season
+# raw.nhl.2017 <- scrape_season(nhlSeasons[3] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2017-18")
+# # 2018-19 season. 1274 observations -> 1271 games, 3 allstar games
+# raw.nhl.2018 <- scrape_season(nhlSeasons[4] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2018-19")
+# # 2019-2020 season, up to covid. 1085 observations -> 1082 games, 3 allstar games
+# raw.nhl.2019 <- scrape_season(nhlSeasons[5] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2019-20")
+# # 2020-21 season. 56 instead of 82 games. 938 observations -> 868 games, the playoffs began on "2021-05-15", 
+# # but there were still a couple of regular season games going on. Code below removes the 14 playoff games. Additionally, there were 56 postponed games
+# raw.nhl.2020 <- scrape_season(nhlSeasons[6] %>% reduce(c), "nhl", tries = 20) %>%
+#   filter(!(home %notin% c("Calgary Flames?", "Edmonton Oilers?", "Vancouver Canucks?") & date > "2021-05-14")) %>% 
+#   filter(!(home == "Edmonton Oilers?" & date == "2021-05-19")) %>% 
+#   mutate(season = "2020-21")
+# # 2021-22 season. 1413 observations -> 1312 games, 3 allstar games, 98 postponed. Kraken joined
+# raw.nhl.2021 <- scrape_season(nhlSeasons[7] %>% reduce(c), "nhl") %>% 
+#   mutate(season = "2021-22")
+# # 2022-23 season. 1330 observations -> 1312 games, 3 allstar games, regular season started abroad 
+# # on 2022-10-07, and picked up again on 2022-10-11. There were 15 games inbetween that that were practice
+# raw.nhl.2022 <- scrape_season(nhlSeasons[8] %>% reduce(c), "nhl", tries = 20) %>% 
+#   filter(!(home %notin% c("San Jose Sharks?", "Nashville Predators?") & date < "2022-10-11")) %>% 
+#   mutate(season = "2022-23")
+# 
+# # write the data - it's probably just smarter to save the dataframes one at a time
 # mass_write("assets/game_data/nba/", game_data_names %includes% "nba")
 # mass_write("assets/game_data/nhl/", game_data_names %includes% "nhl")
 # write_csv(test, "assets/game_data/nhl/raw.nhl.2022.csv")
 
-# betting data 
-attach_source("bet.R", "betting_data")
-# write_bet("assets/betting_data/")
+### Betting Data ###
+# attach_source("bet.R", "betting_data")
+# # write_bet("assets/betting_data/")
 
-# collect Raw data, tigris package function
-counties(cb = TRUE, resolution = "500k") %>% # 500k is best resolution
-  # saveRDS(file = "assets/leaflet/2020_fips_shapes.rds") # geometry doesn't save nicely as CSV
+### County Shape Files ### 
+# counties(cb = TRUE, resolution = "500k") %>% # 500k is best resolution
+#   # saveRDS(file = "assets/leaflet/2020_fips_shapes.rds") # geometry doesn't save nicely as CSV
 
-# tidycensus package. Newest is 2019 apparently
-# get_estimates(geography = "county", product = "population", year = 2019) %>% # this is old 7/10/2023
-#   # write_csv("assets/cbsa_data/dat.population.csv")
-get_estimates(geography = "county", variables = "POPESTIMATE", year = 2021) %>% 
-  # write_csv("assets/cbsa_data/dat.population.2021.csv")
-get_estimates(geography = "county", variables = "POPESTIMATE", year = 2022) %>% 
-  # write_csv("assets/cbsa_data/dat.population.2022.csv")
+### Population Data ###
+# get_estimates(geography = "county", variables = "POPESTIMATE", year = 2021) %>% 
+#   # write_csv("assets/cbsa_data/dat.population.2021.csv")
+# get_estimates(geography = "county", variables = "POPESTIMATE", year = 2022) %>% 
+#   # write_csv("assets/cbsa_data/dat.population.2022.csv")
 
 # FIP/CBSA Data ----------------------------------------------------------------
 
-# get neighboring counties
-# dat.neighboring <- readRDS("assets/leaflet/2020_fips_shapes.rds") %>% # gets county geo-spatial data
-#   select(GEOID, geometry) %>% 
-#   set_colnames(c("fips", "geometry"))
-# dat.neighboring <- dat.neighboring %>% # run geo-spatial list into a function that automatically detects adjacencies
-#   pull(geometry) %>% 
-#   poly2nb(row.names = dat.neighboring %>% pull(fips)) %>% 
-#   neighborsDataFrame() %>% # expp library
-#   group_by(id) %>% 
-#   summarize(id_neigh = list(unique(id_neigh))) %>% 
-#   ungroup() %>% 
-#   set_colnames(c("fips", "fips_neighbors")) # 3214 obs, 2 vars - 8/7/2023
-
-# because I can't fix expp
-# saveRDS(dat.neighboring, "assets/dat.neighboring.rds")
+# neighboring counties
 dat.neighboring <- readRDS("assets/dat.neighboring.rds")
 
 # clean population data for merge
@@ -247,143 +229,80 @@ dat.covid <- read_csv("assets/covid_data/raw.covid2021.csv") %>%
   relocate(central_outlying:cbsa_pop_2022, .after = county) %>% 
   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
   group_by(fips, cbsa) %>% # need central_outlying to adequately identify counties, since we have duplicates.
-  mutate(across(cases:deaths, ~case_when( # create new cases and deaths
+  select(-deaths) %>% 
+  mutate(n_cases = case_when(
     row_number() == 1 ~ NA_real_, 
-    T ~ .x - lag(.x)
-  ), 
-  .names = "n_{col}"
-  )) %>%  
+    T ~ cases - lag(cases)
+    )) %>%  
   ungroup() %>% 
   filter(date > "2021-09-12") %>% # we just needed this to calculate new cases for 2021-09-13
   # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
   # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
-  mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
-    .x <= 0 ~ NA,
-    T ~ .x
-  ),
-  .names = "i_{col}"
+  mutate(i_n_cases = case_when( # impute negatives to NAs
+    n_cases <= 0 ~ NA,
+    T ~ n_cases
   )) %>% 
   group_by(cbsa, fips) %>% 
-  mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
-  mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
+  mutate(i_n_cases = my_impute(i_n_cases)) %>% 
+  mutate(i_n_cases = case_when(is.na(i_n_cases) ~ 0, T ~ i_n_cases)) %>% 
   # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
   # ... at the end of the data set, so we are fine setting them to 0.
   # gets the rolling weekly cases figure, and the lag of that.
-  mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
+  mutate(across(n_cases:i_n_cases, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
                 .names = "w_{col}")) %>% 
-  mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
+  mutate(across(w_n_cases:w_i_n_cases, ~ lag(get(cur_column()), 7),
                 .names = "l_{col}")) %>% 
   ungroup() %>% # aggregate to cbsa levels
   left_join( 
     filter(., central_outlying != "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
+      mutate(across(w_n_cases:w_i_n_cases, ~sum(.x), .names = "cbsa_{col}")) %>% 
       ungroup() %>% 
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
-      mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(cbsa_w_n_cases:cbsa_w_i_n_cases, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_cases)", perl = T), ~case_when(
         date < "2022-01-01" ~ .x*100/cbsa_pop_2021,
         T ~ .x*100/cbsa_pop_2022,
-        )
+        ), .names = "{col}_per"
         )) %>% 
-      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_deaths)", perl = T), ~case_when(
-        date < "2022-01-01" ~ .x*100000/cbsa_pop_2021,
-        T ~ .x*100000/cbsa_pop_2022,
-      )
-      )) %>% 
-      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
+      select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_cases_per),
     by = c("date", "cbsa")) %>% 
   left_join( # aggregate to cbsa levels
     filter(., central_outlying == "Neighboring") %>% 
       distinct(date, cbsa, fips, .keep_all = T) %>%
       group_by(date, cbsa) %>% 
-      mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
+      mutate(across(w_n_cases:w_i_n_cases, ~sum(.x), .names = "neigh_{col}")) %>% 
       ungroup() %>% 
       distinct(date, cbsa, .keep_all = T) %>% 
       group_by(cbsa) %>% # add one week lag
-      mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
+      mutate(across(neigh_w_n_cases:neigh_w_i_n_cases, ~lag(.x, 7), .names = "l_{col}")) %>% 
       mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_cases)", perl = T), ~case_when(
         date < "2022-01-01" ~ .x*100/cbsa_pop_2021,
         T ~ .x*100/cbsa_pop_2022,
-      )
+      ), .names = "{col}_per"
       )) %>% 
-      mutate(across(matches("(?=.*(?:cbsa|neigh))(?=.*_n_deaths)", perl = T), ~case_when(
-        date < "2022-01-01" ~ .x*100000/cbsa_pop_2021,
-        T ~ .x*100000/cbsa_pop_2022,
-      )
-      )) %>% 
-      select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
+      select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_cases_per),
     by = c("date", "cbsa")) # 187775 obs, 41 vars  - 8/7/2023. you get errors from my_impute function
+# just 26 vars now 9/3/2023
 
-# THIS IS CURRENTLY NOT BEING USED. WE AREN'T USING COVID-19 DATA IN THE MULTI-SEASON REGRESSION
-# This also isn't updated to the newest code, specicially, population data will be messed up, and I forgot to divide neigh by population.
-# dat.covid.2020 <- read_csv("assets/covid_data/raw.covid2020.csv") %>% 
-#   as_tibble() %>% 
-#   relocate(fips, state, .before = county) %>% 
-#   # The 5 boroughs are listed as "New York City" in county var, and NA in fips. ...
-#   # ... I made it so NYC all under Bronx fip. 309 unique cbsa fips now. So 313 + 403 - 4 - 10 = 702 unique fips
-#   mutate(fips = case_when(county == "New York City" ~ "36005", T ~ fips)) %>% 
-#   filter(fips %in% (dat.cbsa %>% pull(fips))) %>% 
-#   # Jan 6th 2020 is the first monday of the year, and april 5th is a sunday
-#   filter("2020-01-05" <= date & date <= "2020-04-05") %>% # keep a day before 2020-01-05 for lag calculation
-#   left_join(dat.cbsa %>% select(cbsa, cbsa_title, home, fips, central_outlying, cbsa_pop), by = "fips", relationship = "many-to-many") %>% 
-#   relocate(cbsa:home, .after = date) %>% 
-#   relocate(central_outlying:cbsa_pop, .after = county) %>% 
-#   mutate(floor_monday = floor_date(date, "week", 1), .after = date) %>%  # week identifier
-#   group_by(fips, cbsa) %>% # need central_outlying to adequately identify counties, since we have duplicates.
-#   mutate(across(cases:deaths, ~case_when( # create new cases and deaths
-#     row_number() == 1 ~ NA_real_, 
-#     T ~ .x - lag(.x)
-#   ), 
-#   .names = "n_{col}"
-#   )) %>%  
-#   ungroup() %>% 
-#   filter(date > "2020-01-05") %>% # we just needed this to calculate new cases for 2020-01-06
-#   # we now have the same fips as dat.cbsa, but 4 less from NYC so 725 FIPs each with 259 observations. ...
-#   # 187775 total, 23 duplicate FIPs (still, the removed counties were not duplicates)
-#   mutate(across(n_cases:n_deaths, ~case_when( # impute negatives to NAs
-#     .x <= 0 ~ NA,
-#     T ~ .x
-#   ),
-#   .names = "i_{col}"
-#   )) %>% 
-#   group_by(cbsa, fips) %>% 
-#   mutate(across(i_n_cases:i_n_deaths, ~round(my_impute(.x), digits = 0))) %>% 
-#   mutate(across(i_n_cases:i_n_deaths, ~case_when(is.na(.x) ~ 0, T ~ .x))) %>% 
-#   # Any leftover NAs just mean there was something like c(..., 100, 0, -3, 0, 0) ...
-#   # ... at the end of the data set, so we are fine setting them to 0.
-#   # gets the rolling weekly cases figure, and the lag of that.
-#   mutate(across(n_cases:i_n_deaths, ~ .x + lag(.x) + lag(.x, 2) + lag(.x, 3) + lag(.x, 4) + lag(.x, 5) + lag(.x, 6),
-#                 .names = "w_{col}")) %>% 
-#   mutate(across(w_n_cases:w_i_n_deaths, ~ lag(get(cur_column()), 7),
-#                 .names = "l_{col}")) %>% 
-#   ungroup() %>% # aggregate to cbsa levels
-#   left_join( 
-#     filter(., central_outlying != "Neighboring") %>% 
-#       distinct(date, cbsa, fips, .keep_all = T) %>%
-#       group_by(date, cbsa) %>% 
-#       mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "cbsa_{col}")) %>% 
-#       ungroup() %>% 
-#       distinct(date, cbsa, .keep_all = T) %>% 
-#       group_by(cbsa) %>% # add one week lag
-#       mutate(across(cbsa_w_n_cases:cbsa_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-#       mutate(across(matches("(?=.*cbsa)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
-#       select(date, cbsa, cbsa_w_n_cases:l_cbsa_w_i_n_deaths),
-#     by = c("date", "cbsa")) %>% 
-#   left_join( # aggregate to cbsa levels
-#     filter(., central_outlying == "Neighboring") %>% 
-#       distinct(date, cbsa, fips, .keep_all = T) %>%
-#       group_by(date, cbsa) %>% 
-#       mutate(across(w_n_cases:w_i_n_deaths, ~sum(.x), .names = "neigh_{col}")) %>% 
-#       ungroup() %>% 
-#       distinct(date, cbsa, .keep_all = T) %>% 
-#       group_by(cbsa) %>% # add one week lag
-#       mutate(across(neigh_w_n_cases:neigh_w_i_n_deaths, ~lag(.x, 7), .names = "l_{col}")) %>% 
-#       mutate(across(matches("(?=.*neigh)(?=.*_n)", perl = T), ~ .x*100000/cbsa_pop)) %>% 
-#       select(date, cbsa, neigh_w_n_cases:l_neigh_w_i_n_deaths),
-#     by = c("date", "cbsa")) # 13019 obs, 40 vars  - 6/25/2023. you get errors from my_impute function
+dat.covid %>% group_by(county) %>% 
+  filter(any(n_cases < 0)) %>% 
+  arrange(county, central_outlying, date) %>% 
+  view() 
+
+dat.covid %>% filter(county == "Dallas") %>% view()
+# big fact -17k, data not bunched up next day. Previous days don't seem abnormally large...
+# ... also, smoothing algorithm does not seem to be doing a great job. Abnormally large figures on tuesdays...
+dat.covid %>% filter(county == "San Mateo") %>% view()
+# seems like excessive cases, like 7000 the day before then -7000. Different from before.
+dat.covid %>% filter(county == "Monterey") %>% view()
+# seems like excessive cases, like 4000 the day before then -4000. Different from before.
+dat.covid %>% filter(county == "San Francisco") %>% view()
+# also seems like all misreported cases were added to the day before, by accident.
+dat.covid %>% filter(county == "Denton") %>% view()
+# no obvious placement of cases,
 
 # Betting Data -----------------------------------------------------------------
 
@@ -501,8 +420,8 @@ dat.final <- dat.nba %>% # 19007 obs, 13 vars - 7/13/2023.
   )) %>% 
   mutate(game_time_approx = case_when( # forward inclusive, like an 8:59pm game is still "Evening Game"
     game_time_num < 18 ~ "Early Game", # includes, for example, 5:15pm
-    18 <= game_time_num & game_time_num <= 20 ~ "Evening Game",
-    game_time_num > 20 ~ "Night Game" 
+    18 <= game_time_num & game_time_num < 20 ~ "Evening Game",
+    game_time_num >= 20 ~ "Night Game" 
   ), .after = game_time_num) %>% 
   mutate(game_time_approx = factor(game_time_approx, levels = c("Evening Game", "Early Game", "Night Game"))) %>% 
   mutate(policy = policy_func(home, date), .after = stadium) %>% 
@@ -545,7 +464,17 @@ dat.final <- dat.nba %>% # 19007 obs, 13 vars - 7/13/2023.
     T ~ lag_win_percent
   )) %>% 
   mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))) # 18943 obs, 47 vars - 8/7/2023
+# 51 vars now 9/3/2023
   
+
+
+
+
+
+
+
+
+
 
 
 

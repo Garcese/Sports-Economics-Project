@@ -4,357 +4,26 @@
 
 # Tables ------------------------------------------------------------
 
-# League-level
+# general stats for numeric var
 dat.final %>% 
-  filter(!is.na(cbsa)) %>%
-  # filter(season == "2021-22") %>%
-  # mutate(across(contains("cases"), ~.x*1000)) %>% 
-  group_by(league, season) %>% 
-  # filter(!is.na(adj_home_odds)) %>% 
-  summary_stats(attendance_per) %>% 
+  filter(season == "2021-22" & !is.na(cbsa)) %>%
+  group_by(league) %>% 
+  summary_stats(cbsa_w_n_cases) %>% # change to desired variable
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3))))
+
 # League-level Home-level standard deviation
 dat.final %>% 
+  filter(season == "2021-22" & !is.na(cbsa)) %>%
   group_by(league, home) %>% 
   summarize(home_sd = psd(attendance_per))%>% 
   ungroup() %>% 
   group_by(league) %>% 
   summary_stats("home_sd") %>% 
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 4))))
-# 
-dat.final %>% filter(season == "2020-21") %>% 
-  # group_by(league, weekday) %>% summarize(n = n()) %>% 
-  # ungroup() %>% 
-  group_by(league) %>% 
-  summary_stats(attendance_per) %>% 
-  mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3)))) %>% 
-  # mutate(percent = n/sum(n)) %>% 
-  view()
-# Covid-19 Statistics
+
+# for categorical variables
 dat.final %>% 
-  mutate(across(contains("cases"), ~.x*1000)) %>% 
-  filter(season == "2021-22" & !is.na(cbsa)) %>% 
-  group_by(league) %>% 
-  summary_stats(cbsa_w_n_cases:neigh_w_n_deaths, yes_median = T)
-
-# Attendance Plots -------------------------------------------------------------
-
-# Plot of attendance distributions
-plot.attendance <- dat.final %>% 
-  filter(season %in% c("2015-16", "2016-17", "2017-18", "2018-19", "2019-20", "2021-22")) %>% 
-  mutate("Season(s)" = case_when(
-    season == "2021-22" ~ "2021",
-    T ~ "2015-19*"
-  )) %>% 
-  ggplot(aes(x = attendance_per, fill = `Season(s)`)) + 
-  geom_density(alpha = 0.5) + 
-  facet_wrap(~league, nrow = 2, scale = "free_y") + 
-  scale_x_continuous(
-    breaks = seq(30, 120, length =  10),
-    label = percent_format(scale = 1)
-  ) + 
-  geom_hline(yintercept = 0) + 
-  labs(
-    title = "Distribution of Attendance Rate",
-    subtitle = "2015-2019* Seasons VS. 2021 Season",
-    x = "Attendance Rate",
-    y = "Density",
-  )
-
-ggsave("plots/plot.attendance.png", plot.attendance, width = 6, height = 4, units = "in", dpi = 600)
-
-# Covid-19 Plots ---------------------------------------------------------------
-
-# Per CBSA
-cbsa_covid_plot <- function(.home, .imputed = T) {
-  # get the right season length
-  if (.home %in% (dat.final %>% filter(league == "NBA") %>% pull(home))) {
-    dat.lower <- "2021-10-18"
-    dat.upper <- "2022-04-11"
-  }
-  else {
-    dat.lower <- "2021-10-11"
-    dat.upper <- "2022-04-30"
-  }
-  var1 <- if (.imputed) "cbsa_w_i_n_cases" else "cbsa_w_n_cases"
-  var2 <- if (.imputed) "neigh_w_i_n_cases" else "neigh_w_n_cases"
-  var3 <- if (.imputed) "cbsa_w_i_n_deaths" else "cbsa_w_n_deaths"
-  var4 <- if (.imputed) "neigh_w_i_n_deaths" else "neigh_w_n_deaths"
-  # cases plot
-  plot.cases <- dat.covid %>%
-    unnest(home) %>%
-    filter(home == .home) %>%
-    filter(date > dat.lower & date < dat.upper) %>%
-    select(date, all_of(c(var1, var2))) %>% 
-    distinct() %>% 
-    set_colnames(c("date", "Weekly New Cases", "Neighboring Weekly New Cases")) %>%
-    pivot_longer(`Weekly New Cases`:`Neighboring Weekly New Cases`) %>%
-    mutate(name = factor(name, levels = c("Weekly New Cases", "Neighboring Weekly New Cases"))) %>%
-    ggplot(aes(x = date, y = value, fill = name)) +
-    geom_col(width = 5) +
-    facet_wrap(
-      ~name,
-      nrow = 1,
-      scales = "fixed"
-    ) +
-    geom_hline(yintercept = 0) +
-    scale_x_date(date_labels = "%b", date_breaks = "1 month") +
-    scale_y_continuous(labels = percent_format(scale = 1)) +
-    scale_fill_discrete(guide = "none") +
-    labs(
-      title = paste("New Weekly Covid-19 Cases/Deaths for the", .home),
-      y = "Cases/Deaths per Population (%)"
-    ) + 
-    theme(
-      axis.text.x = element_blank(),
-      axis.title.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      axis.title.y = element_blank()
-    )
-  # deaths plot
-  plot.deaths <- dat.covid %>%
-    unnest(home) %>%
-    filter(home == .home) %>%
-    filter(date > dat.lower & date < dat.upper) %>%
-    select(date, all_of(c(var3, var4))) %>% 
-    distinct() %>% 
-    set_colnames(c("date", "Weekly New Deaths", "Neighboring Weekly New Deaths")) %>%
-    pivot_longer(`Weekly New Deaths`:`Neighboring Weekly New Deaths`) %>%
-    mutate(name = factor(name, levels = c("Weekly New Deaths", "Neighboring Weekly New Deaths"))) %>%
-    ggplot(aes(x = date, y = value, fill = name)) +
-    geom_col(width = 5) +
-    facet_wrap(
-      ~name,
-      nrow = 1,
-      scales = "fixed"
-    ) +
-    geom_hline(yintercept = 0) +
-    scale_x_date(date_labels = "%b", date_breaks = "1 month") +
-    scale_y_continuous(labels = percent_format(scale = 1)) +
-    scale_fill_discrete(guide = "none") +
-    labs(
-      title = paste("New Weekly Covid-19 Cases/Deaths for the", .home),
-      x = "Date (2021-22)",
-      y = "Cases/Deaths per Population (%)"
-    ) + 
-    theme(
-      plot.title = element_blank(),
-      axis.title.y = element_blank()
-    )
-  # share y-axis title (seems to be the best way, src SE)
-  plot.y.title <- ggplot() + 
-    annotate(geom = "text", x = 1, y = 1, label = "Cases/Deaths per Population (%)", angle = 90) +
-    coord_cartesian(clip = "off") +
-    theme_void()
-  # patchwork together
-  (plot.y.title | (plot.cases / plot.deaths)) +
-    plot_layout(widths = c(.05, 1))
-}
-
-cbsa_covid_plot(.home = "Dallas Stars", .imputed = T)
-
-# Covid-19 Plots Over Season ---------------------------------------------------
-
-plot.nba.policy <- dat.final %>% 
-  filter(season == "2021-22" & league == "NBA" & !is.na(cbsa)) %>% 
-  select(-policy) %>% 
-  left_join(
-    tibble(
-      date = rep(seq(as.Date("2021-10-12"), as.Date("2022-04-29"), by = "days"), 53),
-      league_home = dat.final %>%
-        filter(!is.na(cbsa)) %>% 
-        mutate(league_home = paste(league, home, sep = ",")) %>% 
-        pull(league_home) %>%
-        unique() %>% 
-        map(~rep(.x, 200)) %>% 
-        unlist()
-    ) %>% 
-      separate(league_home, into = c("league", "home"), extra = "merge") %>% 
-      mutate(policy = policy_func(home, date)) %>% 
-      filter(!(league == "NBA" & date < "2021-10-19")) %>% # nba season started 19th, nhl 12th
-      dummy_cols("policy", remove_selected_columns = T) %>% 
-      rename_with(~str_sub(.x, 8L, -1L), 4:7) %>% 
-      group_by(league, date) %>% 
-      summarize(
-        "none" = sum(none)/n(),
-        "mask" = sum(mask)/n(),
-        "vaccine" = sum(vaccine)/n(),
-        "both" = sum(both)/n(),
-      ) %>% 
-      ungroup() %>% 
-      pivot_longer(none:both, names_to = "policy", values_to = "values") %>%
-      mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))), 
-    by = c("league", "date")
-  ) %>% 
-  relocate(policy:values, .after = date) %>% 
-  ggplot(aes(x = date)) +
-  geom_line(aes(y = (values*8 + 4), linetype = policy, color = policy)) +
-  geom_point(aes(y = cbsa_w_i_n_cases)) +
-  geom_hline(yintercept = seq(4.8, 8, 0.8), color = "grey", alpha = 0.25) +
-  # geom_segment(aes(x = as.Date("2021-09-12"), xend = as.Date("2021-10-13"), y = 4, yend = 4), 
-  #              alpha = 0.0098) + 
-  # geom_segment(aes(x = as.Date("2022-04-16"), xend = as.Date("2022-05-10"), y = 4, yend = 4), 
-  #              alpha = 0.0098) +
-  scale_y_continuous(
-    name = "New Cases",
-    breaks = seq(0, 4, by = 1),
-    minor_breaks = seq(0, 3, 1),
-    label = percent_format(scale = 1),
-    sec.axis = sec_axis(
-      ~.*0.5/4 - 0.5,
-      name = "Policy Proportion",
-      breaks = seq(0.6, 0, by = -0.1),
-      label = percent_format(scale = 100),
-    )
-  ) +
-  geom_hline(yintercept = 0) +
-  coord_cartesian(ylim = c(0, 8), xlim = c(as.Date("2021-10-19"), as.Date("2022-04-10"))) +
-  scale_linetype_manual(values = c("solid", "dashed", "solid", "dashed"), # the name and labels have to match up
-                        name = "Policy Type",
-                        labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
-  ) +
-  scale_color_manual(values = c("black", "black", "gray60", "gray60"),
-                     name = "Policy Type",
-                     labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
-  ) +
-  labs(title = "NBA 2021-22 Regular Season: Cases & Policy Shifts", x = "Month") + 
-  theme(axis.title.y.left = element_text(hjust = 0.185),
-        axis.title.y.right = element_text(vjust = 2, hjust = 0.12),
-  ) +  
-  theme(legend.position = c(1.3, 0.8),
-        plot.margin = margin(r = 4, l = 0.5, t = 0.5, b = 0.5, unit = "cm"))
-#       ###aaaaaaaaaaa
-plot.nhl.policy <- dat.final %>% 
-  filter(season == "2021-22" & league == "NHL" & !is.na(cbsa)) %>% 
-  select(-policy) %>% 
-  left_join(
-    tibble(
-      date = rep(seq(as.Date("2021-10-12"), as.Date("2022-04-29"), by = "days"), 53),
-      league_home = dat.final %>%
-        filter(!is.na(cbsa)) %>% 
-        mutate(league_home = paste(league, home, sep = ",")) %>% 
-        pull(league_home) %>%
-        unique() %>% 
-        map(~rep(.x, 200)) %>% 
-        unlist()
-    ) %>% 
-      separate(league_home, into = c("league", "home"), extra = "merge") %>% 
-      mutate(policy = policy_func(home, date)) %>% 
-      filter(!(league == "NHL" & date < "2021-10-12")) %>% # nba season started 19th, nhl 12th
-      dummy_cols("policy", remove_selected_columns = T) %>% 
-      rename_with(~str_sub(.x, 8L, -1L), 4:7) %>% 
-      group_by(league, date) %>% 
-      summarize(
-        "none" = sum(none)/n(),
-        "mask" = sum(mask)/n(),
-        "vaccine" = sum(vaccine)/n(),
-        "both" = sum(both)/n(),
-      ) %>% 
-      ungroup() %>% 
-      pivot_longer(none:both, names_to = "policy", values_to = "values") %>%
-      mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))), 
-    by = c("league", "date")
-  ) %>% 
-  relocate(policy:values, .after = date) %>% 
-  ggplot(aes(x = date)) +
-  geom_line(aes(y = (values*8 + 4), linetype = policy, color = policy)) +
-  geom_point(aes(y = cbsa_w_i_n_cases)) +
-  geom_hline(yintercept = seq(4.8, 8, 0.8), color = "grey", alpha = 0.25) +
-  # geom_segment(aes(x = as.Date("2021-09-12"), xend = as.Date("2021-10-05"), y = 4, yend = 4), 
-  #              alpha = 0.0098) + 
-  # geom_segment(aes(x = as.Date("2022-05-08"), xend = as.Date("2022-05-20"), y = 4, yend = 4), 
-  #              alpha = 0.0098) +
-  scale_y_continuous(
-    name = "New Cases",
-    breaks = seq(0, 4, by = 1),
-    minor_breaks = seq(0, 3, 1),
-    label = percent_format(scale = 1),
-    sec.axis = sec_axis(
-      ~.*0.5/4 - 0.5,
-      name = "Policy Proportion",
-      breaks = seq(0.6, 0, by = -0.1),
-      label = percent_format(scale = 100),
-    )
-  ) +
-  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
-  geom_hline(yintercept = 0) +
-  coord_cartesian(ylim = c(0, 8), xlim = c(as.Date("2021-10-12"), as.Date("2022-05-01"))) +
-  scale_linetype_manual(values = c("solid", "dashed", "solid", "dashed"), # the name and labels have to match up
-                        name = "Policy Type",
-                        labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
-  ) +
-  scale_color_manual(values = c("black", "black", "gray60", "gray60"),
-                     name = "Policy Type",
-                     labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
-  ) +
-  labs(title = "NHL 2021-22 Regular Season: Cases & Policy Shifts", x = "Month") + 
-  theme(axis.title.y.left = element_text(hjust = 0.185),
-        axis.title.y.right = element_text(vjust = 2, hjust = 0.12),
-  ) +  
-  theme(legend.position = c(1.3, 0.8),
-        plot.margin = margin(r = 4, l = 0.5, t = 0.5, b = 0.5, unit = "cm"))
-
-league_covid_distribution <- function(.league, .var) {
-  if (str_sub(.var, -5L, -1L) == "cases") {
-    x_var <- "Cases"
-  }
-  else {
-    x_var <- "Deaths"
-  }
-  
-  dat.final %>% 
-    filter(season == "2021-22" & league == .league & !is.na(cbsa)) %>% 
-    mutate(cbsa_w_i_n_cases = cbsa_w_i_n_cases) %>% 
-    ggplot(aes(x = !!sym(.var), fill = "Quartiles")) + 
-    geom_density(fill = "#CCCCCC") + 
-    geom_hline(yintercept = 0) + 
-    stat_summary( # God this is amazing
-      geom = "vline",
-      color = "black",
-      linetype = "dashed",
-      show.legend = T,
-      orientation = "y",
-      aes(y = 0.000001, xintercept = after_stat(x)),
-      fun = function(x) {
-        quantile(x, probs = c(0.25, 0.50, 0.75))
-      }
-    ) +
-    scale_fill_manual("Quartiles", values = "Quartiles") + # Will show mean on top of the line
-  labs(
-      title = paste(.league, "New", x_var, "Distribution"),
-      x = paste("New", x_var),
-      y = "Density",
-    ) +
-    scale_x_continuous(
-      label = percent_format(scale = 1),
-    ) + 
-    # scale_y_continuous( ?????? should this be?
-    #   label = percent_format(scale = 1),
-    # ) + 
-    theme(
-      legend.title = element_blank(),
-          legend.spacing.y = unit(0, "mm"), 
-          panel.border = element_rect(colour = "black", fill = NA),
-          aspect.ratio = 1, axis.text = element_text(colour = 1, size = 12),
-          legend.background = element_blank(),
-          legend.box.background = element_rect(colour = "black"),
-          # strip.text.x = element_blank(),
-          # strip.background = element_rect(colour = "black", fill = "white"),
-          legend.position = c(0.8, 0.9),
-        legend.key.size = unit(1.5, "line")
-    )
-}
-
-plot.covid <- league_covid_distribution(.league = "NBA", .var = "cbsa_w_i_n_cases") + plot.nba.policy +
-  league_covid_distribution(.league = "NHL", .var = "cbsa_w_i_n_cases") + plot.nhl.policy +
-  plot_layout(ncol = 2, nrow = 2)
-
-ggsave("plots/plot.covid.png", plot.covid, width = 10.75, height = 8, units = "in", dpi = 600)
-
-# Policy Table -----------------------------------------------------------------
-
-dat.final %>% 
-  filter(season == "2021-22") %>% 
+  filter(season == "2021-22" & !is.na(cbsa)) %>%
   group_by(league, policy) %>% 
   summarize(
     n = n()
@@ -363,7 +32,195 @@ dat.final %>%
   group_by(league) %>% 
   mutate(nprop = n/sum(n))
 
-# Instrument Graph -------------------------------------------------------------
+# Just the start of the season
+dat.final %>% 
+  filter(!is.na(cbsa) & season == "2021-22") %>% 
+  group_by(home) %>% 
+  filter(row_number() == 1) %>% 
+  ungroup() %>% 
+  group_by(league, policy) %>% 
+  summarize(
+    n = n()
+  ) %>% 
+  ungroup() %>% 
+  group_by(league) %>% 
+  mutate(nprop = n/sum(n))
+
+# Figure 1 Plots ---------------------------------------------------------------
+
+plot_distribution <- function(.league, .var = "cbsa_w_n_cases_per") {
+  if (str_detect(.var, "cases")) {
+    x_var <- "Cases"
+  }
+  else {
+    x_var <- .var
+  }
+  # 
+  dat.final %>% 
+    filter(season == "2021-22" & league == .league & !is.na(cbsa)) %>% 
+    ggplot(aes(x = !!sym(.var), fill = "Quartiles")) + 
+    geom_density(fill = "#CCCCCC") + 
+    geom_hline(yintercept = 0) + 
+    labs(
+      title = paste("Game-level Distribution of COVID-19", x_var),
+      x = x_var,
+      y = "Density",
+    ) +
+    scale_x_continuous(
+      label = percent_format(scale = 1),
+    ) 
+    # scale_y_continuous( ?????? should this be? # ASK ANDERSON
+    #   label = percent_format(scale = 1),
+    # ) + 
+}
+
+plot_cases <- function(.league) {
+  if (.league == "NBA") {
+    date.start <- "2021-10-19"
+    date.end <- "2022-04-10"
+  }
+  else {
+    date.start <- "2021-10-12"
+    date.end <- "2022-05-01"
+  }
+  #
+  dat.final %>% 
+    filter(season == "2021-22" & league == .league & !is.na(cbsa)) %>% 
+    #
+    ggplot(aes(x = date)) +
+    geom_point(aes(y = cbsa_w_n_cases_per), size = 0.5) +
+    scale_x_date(
+      date_labels = "%b", 
+      date_breaks = "1 month" 
+    ) +
+    scale_y_continuous(
+      name = "Cases",
+      label = percent_format(scale = 1),
+    ) +
+    geom_hline(yintercept = 0) +
+    coord_cartesian(xlim = c(as.Date(date.start), as.Date(date.end))) +
+    labs(title = paste("COVID-19 Cases Throughout Season"), x = "Month")
+}
+
+plot_policy <- function(.league, .legend = T) {
+  if (.league == "NBA") {
+    date.start <- "2021-10-19"
+    date.end <- "2022-04-10"
+  }
+  else {
+    date.start <- "2021-10-12"
+    date.end <- "2022-05-01"
+  }
+  #
+  plot <- dat.final %>% 
+    filter(season == "2021-22" & league == .league & !is.na(cbsa)) %>% 
+    select(-policy) %>% 
+    left_join(
+      tibble(
+        date = rep(seq(as.Date("2021-10-12"), as.Date("2022-04-29"), by = "days"), 53),
+        league_home = dat.final %>%
+          filter(!is.na(cbsa)) %>% 
+          mutate(league_home = paste(league, home, sep = ",")) %>% 
+          pull(league_home) %>%
+          unique() %>% 
+          map(~rep(.x, 200)) %>% 
+          unlist()
+      ) %>% 
+        separate(league_home, into = c("league", "home"), extra = "merge") %>% 
+        mutate(policy = policy_func(home, date)) %>% 
+        filter(!(league == "NBA" & date < "2021-10-19")) %>% # nba season started 19th, nhl 12th
+        dummy_cols("policy", remove_selected_columns = T) %>% 
+        rename_with(~str_sub(.x, 8L, -1L), 4:7) %>% 
+        group_by(league, date) %>% 
+        summarize(
+          "none" = sum(none)/n(),
+          "mask" = sum(mask)/n(),
+          "vaccine" = sum(vaccine)/n(),
+          "both" = sum(both)/n(),
+        ) %>% 
+        ungroup() %>% 
+        pivot_longer(none:both, names_to = "policy", values_to = "values") %>%
+        mutate(policy = factor(policy, levels = c("none", "mask", "vaccine", "both"))), 
+      by = c("league", "date")
+    ) %>% 
+    relocate(policy:values, .after = date) %>% 
+    ggplot(aes(x = date)) +
+    geom_line(aes(y = values, linetype = policy, color = policy)) +
+    scale_x_date(
+      date_labels = "%b", 
+      date_breaks = "1 month" 
+    ) +
+    scale_y_continuous(
+      name = "% Teams With Policy",
+      label = percent_format(scale = 100),
+    ) +
+    geom_hline(yintercept = 0) +
+    coord_cartesian(ylim = c(0, 0.5), xlim = c(as.Date(date.start), as.Date(date.end))) +
+    scale_linetype_manual(values = c("solid", "dashed", "solid", "dashed"), # the name and labels have to match up
+                          name = expression(underline("Policy Type:")),
+                          labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
+    ) +
+    scale_color_manual(values = c("black", "black", "gray60", "gray60"),
+                       name = expression(underline("Policy Type:")),
+                       labels = c("No Policy", "Mask Mandate", "Vaccine Mandate", "Mask & Vaccine\n      Mandate")
+    ) +
+    labs(title = paste("COVID-19 Policies Throughout Season"), x = "Month")  
+    #
+    if (.legend) {
+      plot
+    }
+  else {
+    plot + theme(legend.position = "none")
+  }
+}
+
+plot.figure1 <- plot_distribution("NBA") + theme(axis.title = element_text(size = 11),
+                                                 axis.text = element_text(size = 10)) +  
+  plot_spacer() + 
+  plot_distribution("NHL") + theme(axis.title = element_text(size = 11),
+                                   axis.text = element_text(size = 10)) +  
+  plot_cases("NBA") +
+  plot_spacer() +
+  plot_cases("NHL") + 
+  plot_policy("NBA") + theme(axis.title = element_text(size = 11),
+                             legend.text = element_text(size = 10)) +  
+  plot_spacer() +
+  plot_policy("NHL") + theme(axis.title = element_text(size = 11),
+                             legend.text = element_text(size = 10)) +   
+  plot_layout(ncol = 3, nrow = 3, widths = c(1, 0.1, 1), guides = "collect") &
+  theme(legend.position = 'bottom') & 
+  theme(plot.title = element_text(size = 12)) 
+
+plot.distribution <- plot_distribution("NBA") +
+  plot_spacer() +
+  plot_distribution("NHL") + 
+  plot_layout(widths = c(1, 0.1, 1)) & 
+  theme(plot.title = element_blank(),
+        axis.text = element_text(size = 10)) 
+
+plot.cases <- plot_cases("NBA") +
+  plot_spacer() +
+  plot_cases("NHL") + 
+  plot_layout(widths = c(1, 0.1, 1)) & 
+  theme(plot.title = element_blank()) 
+
+plot.policies <- plot_policy("NBA") + 
+  plot_spacer() +
+  plot_policy("NHL") + 
+  plot_layout(widths = c(1, 0.1, 1), guides = "collect") &
+  theme(legend.position = 'bottom',
+        plot.title = element_blank(),
+        legend.text = element_text(size = 10))
+
+ggsave("plots/plot.figure1.png", plot.figure1, width = 9, height = 10, units = "in", dpi = 600)
+
+ggsave("plots/plot.distribution.png", plot.distribution, width = 9, height = 3.33, units = "in", dpi = 600)
+
+ggsave("plots/plot.cases.png", plot.cases, width = 9, height = 3.33, units = "in", dpi = 600)
+
+ggsave("plots/plot.policies.png", plot.policies, width = 9, height = 4, units = "in", dpi = 600)
+
+# Instrument Plot --------------------------------------------------------------
 
 plot_instrument <- function(.league = "NBA") {
   
@@ -496,4 +353,8 @@ c("Detroit Pistons", "Washington Wizards", "Orlando Magic", "San Antonio Spurs",
 c("Boston Bruins", "Tampa Bay Lightning", "Washington Capitals")
 # NHL teams with the highest variance
 c("Buffalo Sabres", "Arizona Coyotes", "New Jersey Devils", "San Jose Sharks", "Los Angeles Kings")
+
+
+
+
 
