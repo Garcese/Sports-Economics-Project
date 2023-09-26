@@ -8,7 +8,7 @@
 dat.final %>% 
   filter(season == "2021-22" & !is.na(cbsa)) %>%
   group_by(league) %>% 
-  summary_stats(cbsa_w_n_cases) %>% # change to desired variable
+  summary_stats(neigh_cbsa_w_n_cases_per) %>% # change to desired variable
   mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3))))
 
 # League-level Home-level standard deviation
@@ -24,7 +24,7 @@ dat.final %>%
 # for categorical variables
 dat.final %>% 
   filter(season == "2021-22" & !is.na(cbsa)) %>%
-  group_by(league, policy) %>% 
+  group_by(league, game_time_approx) %>% 
   summarize(
     n = n()
   ) %>% 
@@ -45,6 +45,14 @@ dat.final %>%
   ungroup() %>% 
   group_by(league) %>% 
   mutate(nprop = n/sum(n))
+
+# general stats for numeric var, non-covid years
+dat.final %>% 
+  filter(season %notin% c("2019-20", "2020-21", "2022-23") & !is.na(cbsa)) %>%
+  group_by(season, league) %>% 
+  summary_stats(attendance_per) %>% # change to desired variable
+  mutate(across(where(~is.numeric(.x)), ~sprintf("%.3f", round(.x, 3)))) %>% 
+  filter(str_detect(variable, "mean"))
 
 # Figure 1 Plots ---------------------------------------------------------------
 
@@ -173,46 +181,6 @@ plot_policy <- function(.league, .legend = T) {
     plot + theme(legend.position = "none")
   }
 }
-
-plot.figure1 <- plot_distribution("NBA") + theme(axis.title = element_text(size = 11),
-                                                 axis.text = element_text(size = 10)) +  
-  plot_spacer() + 
-  plot_distribution("NHL") + theme(axis.title = element_text(size = 11),
-                                   axis.text = element_text(size = 10)) +  
-  plot_cases("NBA") +
-  plot_spacer() +
-  plot_cases("NHL") + 
-  plot_policy("NBA") + theme(axis.title = element_text(size = 11),
-                             legend.text = element_text(size = 10)) +  
-  plot_spacer() +
-  plot_policy("NHL") + theme(axis.title = element_text(size = 11),
-                             legend.text = element_text(size = 10)) +   
-  plot_layout(ncol = 3, nrow = 3, widths = c(1, 0.1, 1), guides = "collect") &
-  theme(legend.position = 'bottom') & 
-  theme(plot.title = element_text(size = 12)) 
-
-plot.distribution <- plot_distribution("NBA") +
-  plot_spacer() +
-  plot_distribution("NHL") + 
-  plot_layout(widths = c(1, 0.1, 1)) & 
-  theme(plot.title = element_blank(),
-        axis.text = element_text(size = 10)) 
-
-plot.cases <- plot_cases("NBA") +
-  plot_spacer() +
-  plot_cases("NHL") + 
-  plot_layout(widths = c(1, 0.1, 1)) & 
-  theme(plot.title = element_blank()) 
-
-plot.policies <- plot_policy("NBA") + 
-  plot_spacer() +
-  plot_policy("NHL") + 
-  plot_layout(widths = c(1, 0.1, 1), guides = "collect") &
-  theme(legend.position = 'bottom',
-        plot.title = element_blank(),
-        legend.text = element_text(size = 10))
-
-ggsave("plots/plot.figure1.png", plot.figure1, width = 9, height = 10, units = "in", dpi = 600)
 
 ggsave("plots/plot.distribution.png", plot.distribution, width = 9, height = 3.33, units = "in", dpi = 600)
 
